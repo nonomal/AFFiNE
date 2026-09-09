@@ -1,21 +1,34 @@
+import type {
+  AIModelService,
+  AIToolsConfigService,
+} from '@affine/core/modules/ai-button';
+import type {
+  ServerService,
+  SubscriptionService,
+} from '@affine/core/modules/cloud';
+import type { WorkspaceDialogService } from '@affine/core/modules/dialogs';
 import type { FeatureFlagService } from '@affine/core/modules/feature-flag';
-import type { CopilotSessionType } from '@affine/graphql';
+import type { AppThemeService } from '@affine/core/modules/theme';
+import type { CopilotChatHistoryFragment } from '@affine/graphql';
 import { SignalWatcher, WithDisposable } from '@blocksuite/affine/global/lit';
 import type { EditorHost } from '@blocksuite/affine/std';
 import { ShadowlessElement } from '@blocksuite/affine/std';
 import type { ExtensionType, Store } from '@blocksuite/affine/store';
+import type { NotificationService } from '@blocksuite/affine-shared/services';
 import { css, html } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 
 import type { AppSidebarConfig } from '../../chat-panel/chat-config';
-import { AIProvider } from '../../provider';
-import type { DocDisplayConfig, SearchMenuConfig } from '../ai-chat-chips';
-import type {
-  AIModelSwitchConfig,
-  AINetworkSearchConfig,
-  AIReasoningConfig,
-} from '../ai-chat-input';
+import {
+  AIChatRuntime,
+  type AIChatScope,
+  PlaygroundAIChatSessionStrategy,
+} from '../../runtime/chat';
+import { getAIRequestService } from '../../runtime/request';
+import type { SearchMenuConfig } from '../ai-chat-add-context';
+import type { DocDisplayConfig } from '../ai-chat-chips';
+import type { AIPlaygroundConfig, AIReasoningConfig } from '../ai-chat-input';
 
 export class PlaygroundContent extends SignalWatcher(
   WithDisposable(ShadowlessElement)
@@ -60,13 +73,10 @@ export class PlaygroundContent extends SignalWatcher(
   accessor doc!: Store;
 
   @property({ attribute: false })
-  accessor networkSearchConfig!: AINetworkSearchConfig;
-
-  @property({ attribute: false })
   accessor reasoningConfig!: AIReasoningConfig;
 
   @property({ attribute: false })
-  accessor modelSwitchConfig!: AIModelSwitchConfig;
+  accessor playgroundConfig!: AIPlaygroundConfig;
 
   @property({ attribute: false })
   accessor appSidebarConfig!: AppSidebarConfig;
@@ -81,10 +91,31 @@ export class PlaygroundContent extends SignalWatcher(
   accessor extensions!: ExtensionType[];
 
   @property({ attribute: false })
+  accessor serverService!: ServerService;
+
+  @property({ attribute: false })
   accessor affineFeatureFlagService!: FeatureFlagService;
 
+  @property({ attribute: false })
+  accessor affineThemeService!: AppThemeService;
+
+  @property({ attribute: false })
+  accessor notificationService!: NotificationService;
+
+  @property({ attribute: false })
+  accessor aiToolsConfigService!: AIToolsConfigService;
+
+  @property({ attribute: false })
+  accessor aiModelService!: AIModelService;
+
+  @property({ attribute: false })
+  accessor affineWorkspaceDialogService!: WorkspaceDialogService;
+
+  @property({ attribute: false })
+  accessor subscriptionService!: SubscriptionService;
+
   @state()
-  accessor sessions: CopilotSessionType[] = [];
+  accessor sessions: CopilotChatHistoryFragment[] = [];
 
   @state()
   accessor sharedInputValue: string = '';
@@ -95,37 +126,49 @@ export class PlaygroundContent extends SignalWatcher(
 
   private isSending = false;
 
+  private createSessionRuntime(scope: AIChatScope) {
+    return new AIChatRuntime({
+      request: getAIRequestService(),
+      scope,
+      strategy: new PlaygroundAIChatSessionStrategy(),
+    });
+  }
+
   private readonly getSessions = async () => {
     const sessions =
-      (await AIProvider.session?.getSessions(
+      (await getAIRequestService().getSessions(
         this.doc.workspace.id,
         this.doc.id,
         { action: false }
       )) || [];
     const rootSession = sessions?.findLast(session => !session.parentSessionId);
     if (!rootSession) {
-      // Create a new session
-      const rootSessionId = await AIProvider.session?.createSession({
-        docId: this.doc.id,
+      const runtime = this.createSessionRuntime({
+        kind: 'playground',
         workspaceId: this.doc.workspace.id,
-        promptName: 'Chat With AFFiNE AI',
+        docId: this.doc.id,
       });
-      if (rootSessionId) {
-        this.rootSessionId = rootSessionId;
-        const forkSession = await this.forkSession(rootSessionId);
-        if (forkSession) {
-          this.sessions = [forkSession];
+      try {
+        const rootSession = await runtime.createSession();
+        if (rootSession) {
+          this.rootSessionId = rootSession.sessionId;
+          const forkSession = await this.forkSession(rootSession.sessionId);
+          if (forkSession) {
+            this.sessions = [forkSession];
+          }
         }
+      } finally {
+        runtime.dispose();
       }
     } else {
-      this.rootSessionId = rootSession.id;
+      this.rootSessionId = rootSession.sessionId;
       const childSessions = sessions.filter(
-        session => session.parentSessionId === rootSession.id
+        session => session.parentSessionId === rootSession.sessionId
       );
       if (childSessions.length > 0) {
         this.sessions = childSessions;
       } else {
-        const forkSession = await this.forkSession(rootSession.id);
+        const forkSession = await this.forkSession(rootSession.sessionId);
         if (forkSession) {
           this.sessions = [forkSession];
         }
@@ -134,19 +177,17 @@ export class PlaygroundContent extends SignalWatcher(
   };
 
   private readonly forkSession = async (parentSessionId: string) => {
-    const forkSessionId = await AIProvider.forkChat?.({
+    const runtime = this.createSessionRuntime({
+      kind: 'playground',
       workspaceId: this.doc.workspace.id,
       docId: this.doc.id,
-      sessionId: parentSessionId,
-      latestMessageId: '',
+      parentSessionId,
     });
-    if (!forkSessionId) {
-      return;
+    try {
+      return (await runtime.createSession()) ?? undefined;
+    } finally {
+      runtime.dispose();
     }
-    return await AIProvider.session?.getSession(
-      this.doc.workspace.id,
-      forkSessionId
-    );
   };
 
   private readonly addChat = async () => {
@@ -280,9 +321,11 @@ export class PlaygroundContent extends SignalWatcher(
       }
     };
 
+    // oxlint-disable-next-line typescript/no-misused-promises
     button.addEventListener('click', handleSendClick);
 
     this._disposables.add(() => {
+      // oxlint-disable-next-line typescript/no-misused-promises
       button.removeEventListener('click', handleSendClick);
     });
   }
@@ -321,21 +364,29 @@ export class PlaygroundContent extends SignalWatcher(
       <div class="playground-content">
         ${repeat(
           this.sessions,
-          session => session.id,
+          session => session.sessionId,
           session => html`
             <div class="playground-chat-item">
               <playground-chat
                 .host=${this.host}
                 .doc=${this.doc}
-                .networkSearchConfig=${this.networkSearchConfig}
+                .session=${session}
                 .reasoningConfig=${this.reasoningConfig}
-                .modelSwitchConfig=${this.modelSwitchConfig}
+                .playgroundConfig=${this.playgroundConfig}
                 .appSidebarConfig=${this.appSidebarConfig}
                 .searchMenuConfig=${this.searchMenuConfig}
                 .docDisplayConfig=${this.docDisplayConfig}
                 .extensions=${this.extensions}
+                .serverService=${this.serverService}
                 .affineFeatureFlagService=${this.affineFeatureFlagService}
-                .session=${session}
+                .affineThemeService=${this.affineThemeService}
+                .notificationService=${this.notificationService}
+                .aiToolsConfigService=${this.aiToolsConfigService}
+                .aiModelService=${this.aiModelService}
+                .affineWorkspaceDialogService=${
+                  this.affineWorkspaceDialogService
+                }
+                .subscriptionService=${this.subscriptionService}
                 .addChat=${this.addChat}
               ></playground-chat>
             </div>

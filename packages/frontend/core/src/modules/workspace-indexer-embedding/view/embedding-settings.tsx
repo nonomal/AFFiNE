@@ -62,18 +62,25 @@ const EmbeddingCloud: React.FC<{ disabled: boolean }> = ({ disabled }) => {
         option: checked ? 'on' : 'off',
       });
 
-      embeddingService.embeddingEnabled.setEnabled(checked).catch(error => {
-        const err = UserFriendlyError.fromAny(error);
-        notify.error({
-          title:
-            t[
-              'com.affine.settings.workspace.indexer-embedding.embedding.switch.error'
-            ](),
-          message: t[`error.${err.name}`](err.data),
+      embeddingService.embeddingEnabled
+        .setEnabled(checked)
+        .then(() => {
+          if (checked) {
+            embeddingService.embeddingProgress.startEmbeddingProgress();
+          }
+        })
+        .catch(error => {
+          const err = UserFriendlyError.fromAny(error);
+          notify.error({
+            title:
+              t[
+                'com.affine.settings.workspace.indexer-embedding.embedding.switch.error'
+              ](),
+            message: t[`error.${err.name}`](err.data),
+          });
         });
-      });
     },
-    [embeddingService.embeddingEnabled, t]
+    [embeddingService.embeddingEnabled, embeddingService.embeddingProgress, t]
   );
 
   const handleAttachmentUpload = useCallback(
@@ -84,8 +91,9 @@ const EmbeddingCloud: React.FC<{ disabled: boolean }> = ({ disabled }) => {
         docType: file.type,
       });
       embeddingService.additionalAttachments.addAttachments([file]);
+      embeddingService.embeddingProgress.startEmbeddingProgress();
     },
-    [embeddingService.additionalAttachments]
+    [embeddingService.additionalAttachments, embeddingService.embeddingProgress]
   );
 
   const handleAttachmentsDelete = useCallback(
@@ -159,7 +167,7 @@ const EmbeddingCloud: React.FC<{ disabled: boolean }> = ({ disabled }) => {
   ]);
 
   useEffect(() => {
-    embeddingService.embeddingProgress.startEmbeddingProgressPolling();
+    embeddingService.embeddingProgress.startEmbeddingProgress();
     embeddingService.embeddingEnabled.getEnabled();
     embeddingService.additionalAttachments.getAttachments({
       first: COUNT_PER_PAGE,
@@ -169,7 +177,7 @@ const EmbeddingCloud: React.FC<{ disabled: boolean }> = ({ disabled }) => {
     embeddingService.embeddingProgress.getEmbeddingProgress();
 
     return () => {
-      embeddingService.embeddingProgress.stopEmbeddingProgressPolling();
+      embeddingService.embeddingProgress.stopEmbeddingProgress();
     };
   }, [
     embeddingService.embeddingProgress,

@@ -82,7 +82,8 @@ export class EmbedFigmaBlockComponent extends EmbedBlockComponent<EmbedFigmaMode
             <div class="affine-embed-figma-iframe-container">
               <iframe
                 src=${`https://www.figma.com/embed?embed_host=blocksuite&url=${url}`}
-                allowfullscreen
+                sandbox="allow-same-origin allow-scripts allow-presentation"
+                allow="fullscreen"
                 loading="lazy"
                 credentialless
               ></iframe>
@@ -107,11 +108,13 @@ export class EmbedFigmaBlockComponent extends EmbedBlockComponent<EmbedFigmaMode
               </div>
             </div>
 
-            ${description
-              ? html`<div class="affine-embed-figma-content-description">
-                  ${description}
-                </div>`
-              : nothing}
+            ${
+              description
+                ? html`<div class="affine-embed-figma-content-description">
+                    ${description}
+                  </div>`
+                : nothing
+            }
 
             <div class="affine-embed-figma-content-url" @click=${this.open}>
               <span>www.figma.com</span>

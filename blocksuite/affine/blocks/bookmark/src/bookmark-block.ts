@@ -8,6 +8,7 @@ import type {
 } from '@blocksuite/affine-model';
 import { ImageProxyService } from '@blocksuite/affine-shared/adapters';
 import {
+  BlockElementCommentManager,
   CitationProvider,
   DocModeProvider,
   LinkPreviewServiceIdentifier,
@@ -107,7 +108,9 @@ export class BookmarkBlockComponent extends CaptionedBlockComponent<BookmarkBloc
   }
 
   open = () => {
-    window.open(this.link, '_blank');
+    const link = this.link;
+    if (!link) return;
+    window.open(link, '_blank', 'noopener,noreferrer');
   };
 
   refreshData = () => {
@@ -126,6 +129,14 @@ export class BookmarkBlockComponent extends CaptionedBlockComponent<BookmarkBloc
 
   get imageProxyService() {
     return this.std.get(ImageProxyService);
+  }
+
+  get isCommentHighlighted() {
+    return (
+      this.std
+        .getOptional(BlockElementCommentManager)
+        ?.isBlockCommentHighlighted(this.model) ?? false
+    );
   }
 
   handleClick = (event: MouseEvent) => {

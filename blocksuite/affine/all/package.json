@@ -3,7 +3,7 @@
   "description": "BlockSuite for Affine",
   "type": "module",
   "scripts": {
-    "build": "tsc --build --verbose"
+    "build": "yarn run -T tsc --build --verbose"
   },
   "sideEffects": false,
   "keywords": [],
@@ -48,6 +48,7 @@
     "@blocksuite/affine-gfx-template": "workspace:*",
     "@blocksuite/affine-gfx-text": "workspace:*",
     "@blocksuite/affine-gfx-turbo-renderer": "workspace:*",
+    "@blocksuite/affine-inline-comment": "workspace:*",
     "@blocksuite/affine-inline-footnote": "workspace:*",
     "@blocksuite/affine-inline-latex": "workspace:*",
     "@blocksuite/affine-inline-link": "workspace:*",
@@ -77,8 +78,7 @@
     "@blocksuite/global": "workspace:*",
     "@blocksuite/std": "workspace:*",
     "@blocksuite/store": "workspace:*",
-    "@blocksuite/sync": "workspace:*",
-    "rxjs": "^7.8.1"
+    "@blocksuite/sync": "workspace:*"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -173,6 +173,7 @@
     "./inlines/footnote": "./src/inlines/footnote/index.ts",
     "./inlines/footnote/view": "./src/inlines/footnote/view.ts",
     "./inlines/footnote/store": "./src/inlines/footnote/store.ts",
+    "./inlines/comment": "./src/inlines/comment/index.ts",
     "./inlines/latex": "./src/inlines/latex/index.ts",
     "./inlines/latex/store": "./src/inlines/latex/store.ts",
     "./inlines/latex/view": "./src/inlines/latex/view.ts",
@@ -264,6 +265,7 @@
     "./components/toggle-button": "./src/components/toggle-button.ts",
     "./components/toggle-switch": "./src/components/toggle-switch.ts",
     "./components/toolbar": "./src/components/toolbar.ts",
+    "./components/tooltip": "./src/components/tooltip.ts",
     "./components/view-dropdown-menu": "./src/components/view-dropdown-menu.ts",
     "./components/tooltip-content-with-shortcut": "./src/components/tooltip-content-with-shortcut.ts",
     "./components/resource": "./src/components/resource.ts",
@@ -283,6 +285,7 @@
     "./sync": "./src/sync/index.ts",
     "./extensions/store": "./src/extensions/store.ts",
     "./extensions/view": "./src/extensions/view.ts",
+    "./foundation/clipboard": "./src/foundation/clipboard.ts",
     "./foundation/store": "./src/foundation/store.ts",
     "./foundation/view": "./src/foundation/view.ts"
   },
@@ -292,10 +295,10 @@
     "!src/__tests__",
     "!dist/__tests__"
   ],
-  "version": "0.21.0",
+  "version": "0.27.5",
   "devDependencies": {
     "@vanilla-extract/vite-plugin": "^5.0.0",
-    "msw": "^2.8.4",
-    "vitest": "3.1.3"
+    "msw": "^2.13.2",
+    "vitest": "^4.1.8"
   }
 }

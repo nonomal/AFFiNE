@@ -323,6 +323,7 @@ export const useExportUsers = () => {
         });
         dataToCopy.push(row);
       });
+      // oxlint-disable-next-line typescript/no-floating-promises
       navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
       callback?.();
     },

@@ -69,7 +69,19 @@ export type TagManagerOptions = {
   options: ReadonlySignal<SelectTag[]>;
   onOptionsChange: (options: SelectTag[]) => void;
   onComplete?: () => void;
+  initialDraftText?: string;
 };
+
+// parent elements that can consume tag draft
+const TABLE_CELL_HOST_SELECTOR =
+  'dv-table-view-cell-container, affine-database-virtual-cell-container';
+
+export function consumeTagDraftFromTableCellHost(
+  fromElement: Element
+): string | undefined {
+  const host = fromElement.closest(TABLE_CELL_HOST_SELECTOR) as any;
+  return host?.consumeTagDraft?.();
+}
 
 class TagManager {
   changeTag = (option: Partial<SelectTag>) => {
@@ -349,11 +361,13 @@ export class MultiTagSelect extends SignalWatcher(
     });
     return html` <div class="${tagContainerStyle}" style=${style}>
       <div data-testid="tag-name" class="${tagTextStyle}">${name}</div>
-      ${onDelete
-        ? html` <div class="${tagDeleteIconStyle}" @click="${onDelete}">
-            ${CloseIcon()}
-          </div>`
-        : nothing}
+      ${
+        onDelete
+          ? html` <div class="${tagDeleteIconStyle}" @click="${onDelete}">
+              ${CloseIcon()}
+            </div>`
+          : nothing
+      }
     </div>`;
   }
 
@@ -390,27 +404,31 @@ export class MultiTagSelect extends SignalWatcher(
                 @click="${select.select}"
               >
                 <div class="${selectOptionContentStyle}">
-                  ${select.isCreate
-                    ? html` <div class="${selectOptionNewIconStyle}">
-                        Create
-                      </div>`
-                    : html`
-                        <div
-                          ${dragHandler(select.id)}
-                          class="${selectOptionDragHandlerStyle}"
-                        ></div>
-                      `}
+                  ${
+                    select.isCreate
+                      ? html` <div class="${selectOptionNewIconStyle}">
+                          Create
+                        </div>`
+                      : html`
+                          <div
+                            ${dragHandler(select.id)}
+                            class="${selectOptionDragHandlerStyle}"
+                          ></div>
+                        `
+                  }
                   ${this.renderTag(select.value, select.color)}
                 </div>
-                ${!select.isCreate
-                  ? html` <div
-                      class="${selectOptionIconStyle}"
-                      @click="${clickOption}"
-                      data-testid="option-more"
-                    >
-                      ${MoreHorizontalIcon()}
-                    </div>`
-                  : null}
+                ${
+                  !select.isCreate
+                    ? html` <div
+                        class="${selectOptionIconStyle}"
+                        @click="${clickOption}"
+                        data-testid="option-more"
+                      >
+                        ${MoreHorizontalIcon()}
+                      </div>`
+                    : null
+                }
               </div>
             `;
           }
@@ -425,6 +443,15 @@ export class MultiTagSelect extends SignalWatcher(
       0,
       this.tagManager.filteredOptions$.value.length
     );
+  }
+
+  override connectedCallback() {
+    super.connectedCallback();
+    const draft = this.initialDraftText;
+    if (draft != null && draft !== '') {
+      this.tagManager.text$.value = draft;
+      this.initialDraftText = undefined;
+    }
   }
 
   protected override firstUpdated() {
@@ -471,6 +498,9 @@ export class MultiTagSelect extends SignalWatcher(
 
   @property({ attribute: false })
   accessor value!: ReadonlySignal<string[]>;
+
+  @property({ attribute: false })
+  accessor initialDraftText: string | undefined;
 }
 
 declare global {
@@ -481,8 +511,23 @@ declare global {
 
 const popMobileTagSelect = (target: PopupTarget, ops: TagSelectOptions) => {
   const tagManager = new TagManager(ops);
+  if (ops.initialDraftText) {
+    tagManager.text$.value = ops.initialDraftText;
+  }
   const onInput = (e: InputEvent) => {
     tagManager.text$.value = (e.target as HTMLInputElement).value;
+  };
+  const onKeydown = (e: KeyboardEvent) => {
+    e.stopPropagation();
+    const inputValue = (e.target as HTMLInputElement).value.trim();
+    if (e.key === 'Backspace' && inputValue === '') {
+      const values = tagManager.value$.value;
+      const lastId = values[values.length - 1];
+      if (lastId) {
+        e.preventDefault();
+        tagManager.deleteTag(lastId);
+      }
+    }
   };
   return popMenu(target, {
     options: {
@@ -511,11 +556,21 @@ const popMobileTagSelect = (target: PopupTarget, ops: TagSelectOptions) => {
                 });
                 return html` <div class="${tagContainerStyle}" style=${style}>
                   <div class="${tagTextStyle}">${option.value}</div>
+                  <div
+                    class="${tagDeleteIconStyle}"
+                    @click="${(e: MouseEvent) => {
+                      e.stopPropagation();
+                      tagManager.deleteTag(id);
+                    }}"
+                  >
+                    ${CloseIcon()}
+                  </div>
                 </div>`;
               })}
               <input
                 .value="${tagManager.text$.value}"
                 @input="${onInput}"
+                @keydown="${onKeydown}"
                 placeholder="Type here..."
                 type="text"
                 style="outline: none;border: none;flex:1;min-width: 10px"
@@ -537,9 +592,13 @@ const popMobileTagSelect = (target: PopupTarget, ops: TagSelectOptions) => {
                     });
                     return html`
                       <div style="display: flex; align-items:center;">
-                        ${option.isCreate
-                          ? html` <div style="margin-right: 8px;">Create</div>`
-                          : ''}
+                        ${
+                          option.isCreate
+                            ? html` <div style="margin-right: 8px;">
+                                Create
+                              </div>`
+                            : ''
+                        }
                         <div class="${tagContainerStyle}" style=${style}>
                           <div class="${tagTextStyle}">${option.value}</div>
                         </div>
@@ -582,6 +641,7 @@ export const popTagSelect = (target: PopupTarget, ops: TagSelectOptions) => {
   component.onChange = ops.onChange;
   component.options = ops.options;
   component.onOptionsChange = ops.onOptionsChange;
+  component.initialDraftText = ops.initialDraftText;
   component.onComplete = () => {
     ops.onComplete?.();
     remove();

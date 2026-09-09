@@ -33,10 +33,62 @@ afterAll(() => {
 });
 
 describe('workspace db management', () => {
-  test('trash workspace', async () => {
-    const { trashWorkspace } = await import(
-      '@affine/electron/helper/workspace/handlers'
+  test('list local workspace ids', async () => {
+    const { listLocalWorkspaceIds } =
+      await import('@affine/electron/helper/workspace/handlers');
+    const validWorkspaceId = v4();
+    const noDbWorkspaceId = v4();
+    const deletedWorkspaceId = v4();
+    const fileEntry = 'README.txt';
+
+    const validWorkspacePath = path.join(
+      appDataPath,
+      'workspaces',
+      'local',
+      validWorkspaceId
     );
+    const noDbWorkspacePath = path.join(
+      appDataPath,
+      'workspaces',
+      'local',
+      noDbWorkspaceId
+    );
+    const deletedWorkspacePath = path.join(
+      appDataPath,
+      'workspaces',
+      'local',
+      deletedWorkspaceId
+    );
+    const deletedWorkspaceTrashPath = path.join(
+      appDataPath,
+      'deleted-workspaces',
+      deletedWorkspaceId
+    );
+    const nonDirectoryPath = path.join(
+      appDataPath,
+      'workspaces',
+      'local',
+      fileEntry
+    );
+
+    await fs.ensureDir(validWorkspacePath);
+    await fs.ensureFile(path.join(validWorkspacePath, 'storage.db'));
+    await fs.ensureDir(noDbWorkspacePath);
+    await fs.ensureDir(deletedWorkspacePath);
+    await fs.ensureFile(path.join(deletedWorkspacePath, 'storage.db'));
+    await fs.ensureDir(deletedWorkspaceTrashPath);
+    await fs.outputFile(nonDirectoryPath, 'not-a-workspace');
+
+    const ids = await listLocalWorkspaceIds();
+    expect(ids).toContain(validWorkspaceId);
+    expect(ids).not.toContain(noDbWorkspaceId);
+    expect(ids).not.toContain(deletedWorkspaceId);
+    expect(ids).not.toContain(fileEntry);
+  });
+
+  test('trash workspace', async () => {
+    const { trashWorkspace } =
+      await import('@affine/electron/helper/workspace/handlers');
     const workspaceId = v4();
     const workspacePath = path.join(
       appDataPath,
@@ -58,9 +110,8 @@ describe('workspace db management', () => {
   });
 
   test('delete workspace', async () => {
-    const { deleteWorkspace } = await import(
-      '@affine/electron/helper/workspace/handlers'
-    );
+    const { deleteWorkspace } =
+      await import('@affine/electron/helper/workspace/handlers');
     const workspaceId = v4();
     const workspacePath = path.join(
       appDataPath,
@@ -79,5 +130,48 @@ describe('workspace db management', () => {
         path.join(appDataPath, 'deleted-workspaces', workspaceId)
       )
     ).toBe(false);
+  });
+
+  test.each([
+    {
+      name: 'deleting a workspace',
+      outsideDirName: 'outside-delete-target',
+      call: async () => {
+        const { deleteWorkspace } =
+          await import('@affine/electron/helper/workspace/handlers');
+        return deleteWorkspace(
+          universalId({
+            peer: 'local',
+            type: 'workspace',
+            id: '../../outside-delete-target',
+          })
+        );
+      },
+    },
+    {
+      name: 'deleting backup workspaces',
+      outsideDirName: 'outside-backup-target',
+      call: async () => {
+        const { deleteBackupWorkspace } =
+          await import('@affine/electron/helper/workspace/handlers');
+        return deleteBackupWorkspace('../../outside-backup-target');
+      },
+    },
+    {
+      name: 'recovering backup workspaces',
+      outsideDirName: 'outside-recover-target',
+      call: async () => {
+        const { recoverBackupWorkspace } =
+          await import('@affine/electron/helper/workspace/handlers');
+        return recoverBackupWorkspace('../../outside-recover-target');
+      },
+    },
+  ])('rejects unsafe ids when $name', async ({ outsideDirName, call }) => {
+    const outsideDir = path.join(tmpDir, outsideDirName);
+
+    await fs.ensureDir(outsideDir);
+
+    await expect(call()).rejects.toThrow('Invalid workspace id');
+    expect(await fs.pathExists(outsideDir)).toBe(true);
   });
 });

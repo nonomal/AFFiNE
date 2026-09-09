@@ -9,7 +9,13 @@ import {
 } from '@nestjs/graphql';
 import { GraphQLJSONObject } from 'graphql-scalars';
 
-import { SearchTable } from './tables';
+import { PublicUserType } from '../../core/user';
+import { PublicUser } from '../../models';
+
+export enum SearchTable {
+  block = 'block',
+  doc = 'doc',
+}
 
 export enum SearchQueryType {
   match = 'match',
@@ -39,6 +45,25 @@ registerEnumType(SearchQueryOccur, {
   name: 'SearchQueryOccur',
   description: 'Search query occur',
 });
+
+export interface SearchDoc {
+  docId: string;
+  blockId: string;
+  unitId?: string;
+  projectionVersion?: number;
+  sourceHash?: string;
+  visibility?: string;
+  elementId?: string;
+  frameId?: string;
+  title: string;
+  highlight: string;
+  createdAt: Date;
+  updatedAt: Date;
+  createdByUserId: string;
+  updatedByUserId: string;
+  createdByUser?: PublicUser;
+  updatedByUser?: PublicUser;
+}
 
 @InputType()
 export class SearchQuery {
@@ -157,6 +182,18 @@ export class AggregateInput {
   options!: AggregateOptions;
 }
 
+@InputType()
+export class SearchDocsInput {
+  @Field(() => String)
+  keyword!: string;
+
+  @Field({
+    nullable: true,
+    description: 'Limit the number of docs to return, default is 20',
+  })
+  limit?: number;
+}
+
 @ObjectType()
 export class BlockObjectType {
   @Field(() => [String], { nullable: true })
@@ -259,13 +296,23 @@ export class SearchNodeObjectType {
 
 @ObjectType()
 export class SearchResultPagination {
-  @Field(() => Int)
+  @Field(() => Int, {
+    description:
+      'Number of results returned in this response, not a global total',
+  })
   count!: number;
 
-  @Field(() => Boolean)
+  @Field(() => Boolean, {
+    description:
+      'Whether the provider has more candidates; remaining visible results are not guaranteed',
+  })
   hasMore!: boolean;
 
-  @Field(() => String, { nullable: true })
+  @Field(() => String, {
+    nullable: true,
+    description:
+      'Opaque provider candidate cursor; it does not guarantee complete visible-result pagination',
+  })
   nextCursor?: string;
 }
 
@@ -289,7 +336,9 @@ export class AggregateBucketObjectType {
   @Field(() => String)
   key!: string;
 
-  @Field(() => Int)
+  @Field(() => Int, {
+    description: 'Number of returned sample hits in this bucket',
+  })
   count!: number;
 
   @Field(() => AggregateBucketHitsObjectType, {
@@ -305,4 +354,31 @@ export class AggregateResultObjectType {
 
   @Field(() => SearchResultPagination)
   pagination!: SearchResultPagination;
+}
+
+@ObjectType()
+export class SearchDocObjectType implements Partial<SearchDoc> {
+  @Field(() => String)
+  docId!: string;
+
+  @Field(() => String)
+  title!: string;
+
+  @Field(() => String)
+  blockId!: string;
+
+  @Field(() => String)
+  highlight!: string;
+
+  @Field(() => Date)
+  createdAt!: Date;
+
+  @Field(() => Date)
+  updatedAt!: Date;
+
+  @Field(() => PublicUserType, { nullable: true })
+  createdByUser?: PublicUserType;
+
+  @Field(() => PublicUserType, { nullable: true })
+  updatedByUser?: PublicUserType;
 }

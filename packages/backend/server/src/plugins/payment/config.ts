@@ -1,15 +1,4 @@
-import type { Stripe } from 'stripe';
-
 import { defineModuleConfig } from '../../base';
-
-export interface PaymentStartupConfig {
-  stripe?: {
-    keys: {
-      APIKey: string;
-      webhookKey: string;
-    };
-  } & Stripe.StripeConfig;
-}
 
 export interface PaymentRuntimeConfig {
   showLifetimePrice: boolean;
@@ -20,9 +9,30 @@ declare global {
     payment: {
       enabled: boolean;
       showLifetimePrice: boolean;
-      apiKey: string;
-      webhookKey: string;
-      stripe: ConfigItem<{} & Stripe.StripeConfig>;
+      stripe: ConfigItem<{
+        /** Preferred place for Stripe API key */
+        apiKey?: string;
+        /** Preferred place for Stripe Webhook key */
+        webhookKey?: string;
+        /** Stripe account owning all canonical payment facts */
+        accountId?: string;
+        /** Stripe mode used to isolate canonical payment facts */
+        environment?: 'test' | 'live';
+      }>;
+      revenuecat: ConfigItem<{
+        /** Whether enable RevenueCat integration */
+        enabled?: boolean;
+        /** RevenueCat REST API Key */
+        apiKey?: string;
+        /** RevenueCat Project Id */
+        projectId?: string;
+        /** Authorization header value required by webhook */
+        webhookAuth?: string;
+        /** RC environment */
+        environment?: 'sandbox' | 'production';
+        /** Product whitelist mapping: productId -> { plan, recurring } */
+        productMap?: Record<string, { plan: string; recurring: string }>;
+      }>;
     };
   }
 }
@@ -36,19 +46,26 @@ defineModuleConfig('payment', {
     desc: 'Whether enable lifetime price and allow user to pay for it.',
     default: true,
   },
-  apiKey: {
-    desc: 'Stripe API key to enable payment service.',
-    default: '',
-    env: 'STRIPE_API_KEY',
-  },
-  webhookKey: {
-    desc: 'Stripe webhook key to enable payment service.',
-    default: '',
-    env: 'STRIPE_WEBHOOK_KEY',
-  },
   stripe: {
-    desc: 'Stripe sdk options',
-    default: {},
+    desc: 'Stripe sdk options and credentials',
+    default: {
+      apiKey: '',
+      webhookKey: '',
+      accountId: '',
+      environment: 'test',
+    },
     link: 'https://docs.stripe.com/api',
+  },
+  revenuecat: {
+    desc: 'RevenueCat integration configs',
+    default: {
+      enabled: false,
+      apiKey: '',
+      projectId: '',
+      webhookAuth: '',
+      environment: 'production',
+      productMap: {},
+    },
+    link: 'https://www.revenuecat.com/docs/',
   },
 });

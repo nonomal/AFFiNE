@@ -42,6 +42,7 @@ test('can switch & close tab by clicking', async ({ page }) => {
 
   // the first tab should be active
   await expectActiveTab(page, 0);
+  await expectTabCount(page, 1);
 });
 
 test('Collapse Sidebar', async ({ page }) => {
@@ -78,6 +79,7 @@ test('tab title will change when navigating', async ({ page }) => {
 
   // go to today's journal
   await page.getByTestId('slider-bar-journals-button').click();
+  await page.getByTestId('confirm-create-journal-button').click();
   await expect(page.locator('.doc-title-container')).toContainText('Today');
   const dateString = await page
     .locator('.doc-title-container > span:first-of-type')

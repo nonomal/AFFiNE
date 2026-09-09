@@ -3,7 +3,13 @@ name: Build Images
 on:
   workflow_call:
     inputs:
-      flavor:
+      build-type:
+        type: string
+        required: true
+      app-version:
+        type: string
+        required: true
+      git-short-hash:
         type: string
         required: true
 
@@ -16,12 +22,13 @@ jobs:
   build-web:
     name: Build @affine/web
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.flavor }}
+    environment: ${{ inputs.build-type }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup Version
-        id: version
         uses: ./.github/actions/setup-version
+        with:
+          app-version: ${{ inputs.app-version }}
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
       - name: Build Core
@@ -30,15 +37,13 @@ jobs:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          BUILD_TYPE: ${{ github.event.inputs.flavor }}
-          CAPTCHA_SITE_KEY: ${{ secrets.CAPTCHA_SITE_KEY }}
+          BUILD_TYPE: ${{ inputs.build-type }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: 'affine-web'
-          SENTRY_RELEASE: ${{ steps.version.outputs.APP_VERSION }}
+          SENTRY_RELEASE: ${{ inputs.app-version }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           PERFSEE_TOKEN: ${{ secrets.PERFSEE_TOKEN }}
-          MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
         with:
@@ -49,12 +54,13 @@ jobs:
   build-admin:
     name: Build @affine/admin
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.flavor }}
+    environment: ${{ inputs.build-type }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup Version
-        id: version
         uses: ./.github/actions/setup-version
+        with:
+          app-version: ${{ inputs.app-version }}
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
       - name: Build Admin
@@ -63,14 +69,12 @@ jobs:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          BUILD_TYPE: ${{ github.event.inputs.flavor }}
-          CAPTCHA_SITE_KEY: ${{ secrets.CAPTCHA_SITE_KEY }}
+          BUILD_TYPE: ${{ inputs.build-type }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: 'affine-admin'
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           PERFSEE_TOKEN: ${{ secrets.PERFSEE_TOKEN }}
-          MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}
       - name: Upload admin artifact
         uses: actions/upload-artifact@v4
         with:
@@ -81,12 +85,13 @@ jobs:
   build-mobile:
     name: Build @affine/mobile
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.flavor }}
+    environment: ${{ inputs.build-type }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup Version
-        id: version
         uses: ./.github/actions/setup-version
+        with:
+          app-version: ${{ inputs.app-version }}
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
       - name: Build Mobile
@@ -95,14 +100,12 @@ jobs:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          BUILD_TYPE: ${{ github.event.inputs.flavor }}
-          CAPTCHA_SITE_KEY: ${{ secrets.CAPTCHA_SITE_KEY }}
+          BUILD_TYPE: ${{ inputs.build-type }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: 'affine-mobile'
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           PERFSEE_TOKEN: ${{ secrets.PERFSEE_TOKEN }}
-          MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}
       - name: Upload mobile artifact
         uses: actions/upload-artifact@v4
         with:
@@ -112,8 +115,8 @@ jobs:
 
   build-server-native:
     name: Build Server native - ${{ matrix.targets.name }}
-    runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.flavor }}
+    runs-on: ubuntu-22.04
+    environment: ${{ inputs.build-type }}
     strategy:
       fail-fast: false
       matrix:
@@ -126,10 +129,11 @@ jobs:
             file: server-native.armv7.node
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup Version
-        id: version
         uses: ./.github/actions/setup-version
+        with:
+          app-version: ${{ inputs.app-version }}
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
         with:
@@ -159,10 +163,11 @@ jobs:
     needs:
       - build-server-native
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup Version
-        id: version
         uses: ./.github/actions/setup-version
+        with:
+          app-version: ${{ inputs.app-version }}
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
         with:
@@ -176,8 +181,6 @@ jobs:
           path: ./packages/backend/native
       - name: List server-native files
         run: ls -alh ./packages/backend/native
-      - name: Build @affine/reader
-        run: yarn workspace @affine/reader build
       - name: Build Server
         run: yarn workspace @affine/server build
       - name: Upload server dist
@@ -196,22 +199,12 @@ jobs:
       - build-mobile
       - build-admin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Download server dist
         uses: actions/download-artifact@v4
         with:
           name: server-dist
           path: ./packages/backend/server/dist
-      - name: Setup env
-        run: |
-          echo "GIT_SHORT_HASH=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
-          if [ -z "${{ inputs.flavor }}" ]
-          then
-            echo "RELEASE_FLAVOR=canary" >> "$GITHUB_ENV"
-          else
-            echo "RELEASE_FLAVOR=${{ inputs.flavor }}" >> "$GITHUB_ENV"
-          fi
-
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -226,7 +219,7 @@ jobs:
       # setup node without cache configuration
       # Prisma cache is not compatible with docker build cache
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           registry-url: https://npm.pkg.github.com
@@ -263,21 +256,11 @@ jobs:
         run: mv ./node_modules ./packages/backend/server
 
       - name: Setup Version
-        id: version
         uses: ./.github/actions/setup-version
-
-      - name: Build front Dockerfile
-        uses: docker/build-push-action@v6
         with:
-          context: .
-          push: true
-          pull: true
-          platforms: linux/amd64,linux/arm64
-          provenance: true
-          file: .github/deployment/front/Dockerfile
-          tags: ghcr.io/toeverything/affine-front:${{env.RELEASE_FLAVOR}}-${{ env.GIT_SHORT_HASH }},ghcr.io/toeverything/affine-front:${{env.RELEASE_FLAVOR}}
+          app-version: ${{ inputs.app-version }}
 
-      - name: Build graphql Dockerfile
+      - name: Build backend Dockerfile
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -286,4 +269,4 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           provenance: true
           file: .github/deployment/node/Dockerfile
-          tags: ghcr.io/toeverything/affine-graphql:${{env.RELEASE_FLAVOR}}-${{ env.GIT_SHORT_HASH }},ghcr.io/toeverything/affine-graphql:${{env.RELEASE_FLAVOR}}
+          tags: ghcr.io/toeverything/affine:${{inputs.build-type}}-${{ inputs.git-short-hash }}

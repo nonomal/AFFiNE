@@ -17,6 +17,7 @@ import {
   AttachmentBlockStyles,
 } from '@blocksuite/affine-model';
 import {
+  BlockElementCommentManager,
   CitationProvider,
   DocModeProvider,
   FileSizeLimitProvider,
@@ -53,7 +54,7 @@ type AttachmentResolvedStateInfo = ResolvedStateInfo & {
 
 @Peekable({
   enableOn: ({ model }: AttachmentBlockComponent) => {
-    return !model.store.readonly && model.props.type.endsWith('pdf');
+    return model.props.type.endsWith('pdf');
   },
 })
 export class AttachmentBlockComponent extends CaptionedBlockComponent<AttachmentBlockModel> {
@@ -90,6 +91,14 @@ export class AttachmentBlockComponent extends CaptionedBlockComponent<Attachment
 
   get isCitation() {
     return this.citationService.isCitationModel(this.model);
+  }
+
+  get isCommentHighlighted() {
+    return (
+      this.std
+        .getOptional(BlockElementCommentManager)
+        ?.isBlockCommentHighlighted(this.model) ?? false
+    );
   }
 
   convertTo = () => {
@@ -499,6 +508,7 @@ export class AttachmentBlockComponent extends CaptionedBlockComponent<Attachment
         class=${classMap({
           'affine-attachment-container': true,
           focused: this.selected$.value,
+          'comment-highlighted': this.isCommentHighlighted,
         })}
         style=${this.containerStyleMap}
       >

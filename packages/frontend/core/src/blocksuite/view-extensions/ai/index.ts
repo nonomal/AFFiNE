@@ -19,6 +19,13 @@ import { BlockFlavourIdentifier } from '@blocksuite/affine/std';
 import { FrameworkProvider } from '@toeverything/infra';
 import { z } from 'zod';
 
+import {
+  BlockDiffService,
+  BlockDiffWatcher,
+} from '../../ai/services/block-diff';
+import { blockDiffWidgetForBlock } from '../../ai/widgets/block-diff/block';
+import { blockDiffWidgetForPage } from '../../ai/widgets/block-diff/page';
+import { blockDiffPlayground } from '../../ai/widgets/block-diff/playground';
 import { EdgelessClipboardAIChatConfig } from './edgeless-clipboard';
 
 const optionsSchema = z.object({
@@ -50,6 +57,7 @@ export class AIViewExtension extends ViewExtensionProvider<AIViewOptions> {
           config: imageToolbarAIEntryConfig(),
         })
       );
+
     if (context.scope === 'edgeless' || context.scope === 'page') {
       context.register([
         aiPanelWidget,
@@ -64,7 +72,7 @@ export class AIViewExtension extends ViewExtensionProvider<AIViewOptions> {
       context.register([
         CopilotTool,
         edgelessCopilotWidget,
-        getAIEdgelessRootWatcher(framework),
+        getAIEdgelessRootWatcher(),
         // In note
         ToolbarModuleExtension({
           id: BlockFlavourIdentifier('custom:affine:surface:*'),
@@ -73,7 +81,17 @@ export class AIViewExtension extends ViewExtensionProvider<AIViewOptions> {
       ]);
     }
     if (context.scope === 'page') {
-      context.register(getAIPageRootWatcher(framework));
+      context.register([
+        blockDiffWidgetForPage,
+        blockDiffWidgetForBlock,
+        getAIPageRootWatcher(),
+        BlockDiffService,
+        BlockDiffWatcher,
+      ]);
+
+      if (process.env.NODE_ENV === 'development') {
+        context.register([blockDiffPlayground]);
+      }
     }
   }
 }

@@ -1,6 +1,5 @@
 // packages/frontend/core/src/blocksuite/ai/hooks/useChatPanelConfig.ts
-import { AIModelSwitchService } from '@affine/core/modules/ai-button/services/model-switch';
-import { AINetworkSearchService } from '@affine/core/modules/ai-button/services/network-search';
+import { AIPlaygroundService } from '@affine/core/modules/ai-button/services/playground';
 import { AIReasoningService } from '@affine/core/modules/ai-button/services/reasoning';
 import { CollectionService } from '@affine/core/modules/collection';
 import { DocsService } from '@affine/core/modules/doc';
@@ -20,9 +19,8 @@ import { useFramework } from '@toeverything/infra';
 export function useAIChatConfig() {
   const framework = useFramework();
 
-  const searchService = framework.get(AINetworkSearchService);
   const reasoningService = framework.get(AIReasoningService);
-  const modelSwitchService = framework.get(AIModelSwitchService);
+  const playgroundService = framework.get(AIPlaygroundService);
   const docDisplayMetaService = framework.get(DocDisplayMetaService);
   const workspaceService = framework.get(WorkspaceService);
   const searchMenuService = framework.get(SearchMenuService);
@@ -31,19 +29,13 @@ export function useAIChatConfig() {
   const collectionService = framework.get(CollectionService);
   const docsService = framework.get(DocsService);
 
-  const networkSearchConfig = {
-    visible: searchService.visible,
-    enabled: searchService.enabled,
-    setEnabled: searchService.setEnabled,
-  };
-
   const reasoningConfig = {
     enabled: reasoningService.enabled,
     setEnabled: reasoningService.setEnabled,
   };
 
-  const modelSwitchConfig = {
-    visible: modelSwitchService.visible,
+  const playgroundConfig = {
+    visible: playgroundService.visible,
   };
 
   const docDisplayConfig = {
@@ -90,6 +82,13 @@ export function useAIChatConfig() {
       const collectionMetas$ = collectionService.collectionMetas$;
       return createSignalFromObservable(collectionMetas$, []);
     },
+    getCollectionTitle: (collectionId: string) => {
+      return (
+        collectionService.collectionMetas$.value.find(
+          collection => collection.id === collectionId
+        )?.name ?? ''
+      );
+    },
     getCollectionPageIds: (collectionId: string) => {
       const collection$ = collectionService.collection$(collectionId);
       // TODO: lack of documents that meet the collection rules
@@ -98,6 +97,7 @@ export function useAIChatConfig() {
   };
 
   const searchMenuConfig = {
+    addContextAvailable: workspaceService.workspace.flavour !== 'local',
     getDocMenuGroup: (
       query: string,
       action: SearchDocMenuAction,
@@ -126,10 +126,9 @@ export function useAIChatConfig() {
   };
 
   return {
-    networkSearchConfig,
     reasoningConfig,
     docDisplayConfig,
     searchMenuConfig,
-    modelSwitchConfig,
+    playgroundConfig,
   };
 }

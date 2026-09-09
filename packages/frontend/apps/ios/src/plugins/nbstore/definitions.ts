@@ -1,6 +1,26 @@
+import type { CrawlResult, DocIndexedClock } from '@affine/nbstore';
+import type {
+  NativeIndexField,
+  NativeIndexHit,
+  NativeIndexQuery,
+  NativeIndexSearchOptions,
+  NativeIndexSearchResult,
+} from '@affine/nbstore/sqlite';
+
+type NativeIndexDocument = { id: string; fields: NativeIndexField[] };
+type NativeIndexAggregateResult = {
+  total: number;
+  buckets: {
+    key: string;
+    count: number;
+    score: number;
+    hits: NativeIndexHit[];
+  }[];
+};
+
 export interface Blob {
   key: string;
-  // base64 encoded data
+  // base64 encoded data, or "__AFFINE_BLOB_FILE__:<absolutePath>" for large blobs
   data: string;
   mime: string;
   size: number;
@@ -39,6 +59,7 @@ export interface NbStorePlugin {
   pushUpdate: (options: {
     id: string;
     docId: string;
+    // base64 encoded data
     data: string;
   }) => Promise<{ timestamp: number }>;
   getDocSnapshot: (options: { id: string; docId: string }) => Promise<
@@ -53,6 +74,7 @@ export interface NbStorePlugin {
   setDocSnapshot: (options: {
     id: string;
     docId: string;
+    // base64 encoded data
     bin: string;
     timestamp: number;
   }) => Promise<{ success: boolean }>;
@@ -149,4 +171,58 @@ export interface NbStorePlugin {
     uploadedAt: number | null;
   }) => Promise<void>;
   clearClocks: (options: { id: string }) => Promise<void>;
+  crawlDocData: (options: {
+    id: string;
+    docId: string;
+  }) => Promise<CrawlResult>;
+  indexUpsert: (options: {
+    id: string;
+    table: string;
+    document: NativeIndexDocument;
+  }) => Promise<void>;
+  indexDelete: (options: {
+    id: string;
+    table: string;
+    docId: string;
+  }) => Promise<void>;
+  indexSearch: (options: {
+    id: string;
+    table: string;
+    query: NativeIndexQuery;
+    options: NativeIndexSearchOptions;
+  }) => Promise<NativeIndexSearchResult>;
+  indexAggregate: (options: {
+    id: string;
+    table: string;
+    query: NativeIndexQuery;
+    field: string;
+    limit: number;
+    offset: number;
+    hits?: NativeIndexSearchOptions;
+  }) => Promise<NativeIndexAggregateResult>;
+  indexDeleteByQuery: (options: {
+    id: string;
+    table: string;
+    query: NativeIndexQuery;
+  }) => Promise<{ deleted: number }>;
+  indexFlush: (options: { id: string }) => Promise<void>;
+  indexVersion: () => Promise<{ indexVersion: number }>;
+  getDocIndexedClock: (options: {
+    id: string;
+    docId: string;
+  }) => Promise<DocIndexedClock | null>;
+  setDocIndexedClock: (options: {
+    id: string;
+    docId: string;
+    indexedClock: number;
+    indexerVersion: number;
+  }) => Promise<void>;
+  setDocIndexedClocks: (options: {
+    id: string;
+    clocks: Array<{ docId: string; timestamp: number; indexerVersion: number }>;
+  }) => Promise<void>;
+  clearDocIndexedClock: (options: {
+    id: string;
+    docId: string;
+  }) => Promise<void>;
 }

@@ -6,8 +6,17 @@ export { AccountLoggedIn } from './events/account-logged-in';
 export { AccountLoggedOut } from './events/account-logged-out';
 export { AuthProvider } from './provider/auth';
 export { ValidatorProvider } from './provider/validator';
+export {
+  RealtimeLiveQuery,
+  type RealtimeLiveQueryEventResult,
+  type RealtimeLiveQueryOptions,
+} from './realtime/live-query';
 export { ServerScope } from './scopes/server';
-export { AuthService } from './services/auth';
+export {
+  DEFAULT_SELF_HOSTED_SERVER_NAME,
+  getSelfHostedServerName,
+} from './server-name';
+export { AuthService, type DeviceAuthSession } from './services/auth';
 export { CaptchaService } from './services/captcha';
 export { DefaultServerService } from './services/default-server';
 export { DocCreatedByUpdatedBySyncService } from './services/doc-created-by-updated-by-sync';
@@ -16,8 +25,10 @@ export { FetchService } from './services/fetch';
 export { GraphQLService } from './services/graphql';
 export { InvitationService } from './services/invitation';
 export { InvoicesService } from './services/invoices';
+export { McpCredentialService } from './services/mcp-credential';
 export type { PublicUserInfo } from './services/public-user';
 export { PublicUserService } from './services/public-user';
+export { RealtimeService } from './services/realtime';
 export { SelfhostGenerateLicenseService } from './services/selfhost-generate-license';
 export { SelfhostLicenseService } from './services/selfhost-license';
 export { ServerService } from './services/server';
@@ -35,11 +46,12 @@ export { WorkspaceServerService } from './services/workspace-server';
 export { WorkspaceSubscriptionService } from './services/workspace-subscription';
 export type { ServerConfig } from './types';
 
-// eslint-disable-next-line simple-import-sort/imports
+// oxlint-disable-next-line simple-import-sort/imports
 import { type Framework } from '@toeverything/infra';
 
 import { GlobalCache, GlobalState } from '../storage/providers/global';
 import { GlobalStateService } from '../storage/services/global';
+import { GlobalContextService } from '../global-context';
 import { UrlService } from '../url';
 import { WorkspaceScope, WorkspaceService } from '../workspace';
 import { CloudDocMeta } from './entities/cloud-doc-meta';
@@ -68,6 +80,7 @@ import { FetchService } from './services/fetch';
 import { GraphQLService } from './services/graphql';
 import { InvoicesService } from './services/invoices';
 import { PublicUserService } from './services/public-user';
+import { RealtimeService } from './services/realtime';
 import { SelfhostGenerateLicenseService } from './services/selfhost-generate-license';
 import { SelfhostLicenseService } from './services/selfhost-license';
 import { ServerService } from './services/server';
@@ -92,22 +105,29 @@ import { ServerConfigStore } from './stores/server-config';
 import { ServerListStore } from './stores/server-list';
 import { SubscriptionStore } from './stores/subscription';
 import { UserCopilotQuotaStore } from './stores/user-copilot-quota';
-import { UserFeatureStore } from './stores/user-feature';
 import { UserQuotaStore } from './stores/user-quota';
 import { UserSettingsStore } from './stores/user-settings';
 import { DocCreatedByService } from './services/doc-created-by';
 import { DocUpdatedByService } from './services/doc-updated-by';
 import { DocCreatedByUpdatedBySyncService } from './services/doc-created-by-updated-by-sync';
 import { WorkspacePermissionService } from '../permissions';
+import { NbstoreService } from '../storage';
 import { DocScope, DocService, DocsService } from '../doc';
 import { DocCreatedByUpdatedBySyncStore } from './stores/doc-created-by-updated-by-sync';
 import { GlobalDialogService } from '../dialogs';
+import { McpCredentialService } from './services/mcp-credential';
+import { McpCredentialStore } from './stores/mcp-credential';
 
 export function configureCloudModule(framework: Framework) {
   configureDefaultAuthProvider(framework);
 
   framework
     .service(ServersService, [ServerListStore, ServerConfigStore])
+    .service(RealtimeService, [
+      GlobalContextService,
+      ServersService,
+      NbstoreService,
+    ])
     .service(DefaultServerService, [ServersService])
     .store(ServerListStore, [GlobalStateService])
     .store(ServerConfigStore)
@@ -129,6 +149,8 @@ export function configureCloudModule(framework: Framework) {
       AuthStore,
       UrlService,
       GlobalDialogService,
+      NbstoreService,
+      ServerService,
     ])
     .store(AuthStore, [
       FetchService,
@@ -136,6 +158,7 @@ export function configureCloudModule(framework: Framework) {
       GlobalState,
       ServerService,
       AuthProvider,
+      NbstoreService,
     ])
     .entity(AuthSession, [AuthStore])
     .service(SubscriptionService, [SubscriptionStore])
@@ -148,7 +171,7 @@ export function configureCloudModule(framework: Framework) {
     .entity(Subscription, [AuthService, ServerService, SubscriptionStore])
     .entity(SubscriptionPrices, [ServerService, SubscriptionStore])
     .service(UserQuotaService)
-    .store(UserQuotaStore, [GraphQLService])
+    .store(UserQuotaStore, [NbstoreService])
     .entity(UserQuota, [AuthService, UserQuotaStore])
     .service(UserCopilotQuotaService)
     .store(UserCopilotQuotaStore, [GraphQLService])
@@ -158,8 +181,7 @@ export function configureCloudModule(framework: Framework) {
       ServerService,
     ])
     .service(UserFeatureService)
-    .entity(UserFeature, [AuthService, UserFeatureStore])
-    .store(UserFeatureStore, [GraphQLService])
+    .entity(UserFeature, [AuthService])
     .service(InvoicesService)
     .store(InvoicesStore, [GraphQLService])
     .entity(Invoices, [InvoicesStore])
@@ -171,7 +193,9 @@ export function configureCloudModule(framework: Framework) {
     .service(PublicUserService, [PublicUserStore])
     .store(PublicUserStore, [GraphQLService])
     .service(UserSettingsService, [UserSettingsStore])
-    .store(UserSettingsStore, [GraphQLService]);
+    .store(UserSettingsStore, [GraphQLService, NbstoreService])
+    .service(McpCredentialService, [McpCredentialStore])
+    .store(McpCredentialStore, [GraphQLService]);
 
   framework
     .scope(WorkspaceScope)

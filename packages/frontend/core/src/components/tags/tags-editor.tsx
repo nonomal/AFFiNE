@@ -150,6 +150,7 @@ export const TagsEditor = ({
       const idx = tagColors.findIndex(c => c.value === color);
       return tagColors[(idx + 1) % tagColors.length].value;
     },
+    // oxlint-disable-next-line react-hooks-js/purity
     tagColors[Math.floor(Math.random() * tagColors.length)].value
   );
 
@@ -310,6 +311,7 @@ export const TagsEditor = ({
                 onClick: () => onSelectTagOption(tag),
                 onMouseEnter: () => setFocusedIndex(idx),
                 ['data-testid']: 'tag-selector-item',
+                ['data-modal-action']: '',
                 ['data-focused']: safeFocusedIndex === idx,
                 className: styles.tagSelectorItem,
               };

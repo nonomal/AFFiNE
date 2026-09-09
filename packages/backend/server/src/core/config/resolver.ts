@@ -12,7 +12,7 @@ import {
 } from '@nestjs/graphql';
 import { GraphQLJSON, GraphQLJSONObject } from 'graphql-scalars';
 
-import { Config, URLHelper } from '../../base';
+import { Config, hasNewerVersion, URLHelper } from '../../base';
 import { Namespace } from '../../env';
 import { Feature } from '../../models';
 import { CurrentUser, Public } from '../auth';
@@ -75,14 +75,14 @@ export class ServerConfigResolver {
       name:
         this.config.server.name ??
         (env.selfhosted
-          ? 'AFFiNE Selfhosted Cloud'
+          ? 'AFFiNE Self-hosted'
           : env.namespaces.canary
             ? 'AFFiNE Canary Cloud'
             : env.namespaces.beta
               ? 'AFFiNE Beta Cloud'
               : 'AFFiNE Cloud'),
       version: env.version,
-      baseUrl: this.url.home,
+      baseUrl: this.url.requestBaseUrl,
       type: env.DEPLOYMENT_TYPE,
       features: this.server.features,
     };
@@ -138,19 +138,19 @@ export class ServerConfigResolver {
       const releases = (await response.json()) as Array<{
         name: string;
         url: string;
-        body: string;
+        body: string | null;
         published_at: string;
       }>;
 
       const latest = releases.at(0);
-      if (!latest || latest.name === env.version) {
+      if (!latest || !hasNewerVersion(env.version, latest.name)) {
         return null;
       }
 
       return {
         version: latest.name,
         url: latest.url,
-        changelog: latest.body,
+        changelog: latest.body ?? '',
         publishedAt: new Date(latest.published_at),
       };
     } catch (e) {
@@ -223,13 +223,19 @@ export class AppConfigResolver {
     return await this.service.updateConfig(me.id, updates);
   }
 
-  @Mutation(() => [AppConfigValidateResult], {
+  @Query(() => [AppConfigValidateResult], {
     description: 'validate app configuration',
   })
   async validateAppConfig(
     @Args('updates', { type: () => [UpdateAppConfigInput] })
     updates: UpdateAppConfigInput[]
   ): Promise<AppConfigValidateResult[]> {
+    return this.validateConfigInternal(updates);
+  }
+
+  private validateConfigInternal(
+    updates: UpdateAppConfigInput[]
+  ): AppConfigValidateResult[] {
     const errors = this.service.validateConfig(updates);
 
     return updates.map(update => {

@@ -48,10 +48,24 @@ class MemberManager {
   selectedMemberId = signal<string | null>(null);
 
   filteredMembers = computed(() => {
-    return this.ops.userListService.users$.value.filter(
-      member =>
-        !member.removed && !this.selectedMembers.value.includes(member.id)
-    );
+    const isSearching = this.userListService.searchText$.value !== '';
+    if (isSearching) {
+      return this.ops.userListService.users$.value.filter(
+        member =>
+          !member.removed && !this.selectedMembers.value.includes(member.id)
+      );
+    } else {
+      const currentUser = this.ops.userService.currentUserInfo$.value;
+      return [
+        ...(currentUser ? [currentUser] : []),
+        ...this.ops.userListService.users$.value.filter(
+          member => member.id !== currentUser?.id
+        ),
+      ].filter(
+        member =>
+          !member.removed && !this.selectedMembers.value.includes(member.id)
+      );
+    }
   });
 
   constructor(private readonly ops: MemberManagerOptions) {}
@@ -246,8 +260,10 @@ export const MemberPreview = ({
 export const MultiMemberSelect: React.FC<MemberManagerOptions> = props => {
   const inputRef = useRef<HTMLInputElement>(null);
   const memberListRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const memberManager = useMemo(() => new MemberManager(props), []);
+  const memberManager = useMemo(
+    () => new MemberManager(props), // oxlint-disable-line react-hooks-js/preserve-manual-memoization
+    [] // oxlint-disable-line react/exhaustive-deps
+  );
 
   const isLoading = useSignalValue(memberManager.userListService.isLoading$);
   const selectedMembers = useSignalValue(memberManager.selectedMembers);

@@ -3,8 +3,14 @@ import {
   uint8ArrayToBase64,
 } from '@affine/core/modules/workspace-engine';
 import {
+  decodePayload,
+  MOBILE_BLOB_FILE_PREFIX,
+} from '@affine/mobile-shared/nbstore/payload';
+import {
   type BlobRecord,
+  type CrawlResult,
   type DocClock,
+  type DocIndexedClock,
   type DocRecord,
   type ListedBlobRecord,
   parseUniversalId,
@@ -130,14 +136,23 @@ export const NbStoreNativeDBApis: NativeDBApis = {
       id,
       key,
     });
-    return record
-      ? {
-          data: base64ToUint8Array(record.data),
-          key: record.key,
-          mime: record.mime,
-          createdAt: new Date(record.createdAt),
-        }
-      : null;
+    if (!record) {
+      return null;
+    }
+
+    let refreshedBlobPromise: ReturnType<typeof NbStore.getBlob> | undefined;
+
+    return {
+      data: await decodePayload(record.data, MOBILE_BLOB_FILE_PREFIX, {
+        onTokenReadFailure: async () => {
+          refreshedBlobPromise ??= NbStore.getBlob({ id, key });
+          return (await refreshedBlobPromise)?.data;
+        },
+      }),
+      key: record.key,
+      mime: record.mime,
+      createdAt: new Date(record.createdAt),
+    };
   },
   setBlob: async function (id: string, blob: BlobRecord): Promise<void> {
     await NbStore.setBlob({
@@ -334,6 +349,117 @@ export const NbStoreNativeDBApis: NativeDBApis = {
       peer,
       blobId,
       uploadedAt: uploadedAt ? uploadedAt.getTime() : null,
+    });
+  },
+  crawlDocData: async function (
+    id: string,
+    docId: string
+  ): Promise<CrawlResult> {
+    return await NbStore.crawlDocData({ id, docId });
+  },
+  indexUpsert: async function (
+    id: string,
+    table: string,
+    document
+  ): Promise<void> {
+    await NbStore.indexUpsert({
+      id,
+      table,
+      document,
+    });
+  },
+  indexDelete: async function (
+    id: string,
+    table: string,
+    docId: string
+  ): Promise<void> {
+    await NbStore.indexDelete({
+      id,
+      table,
+      docId,
+    });
+  },
+  indexSearch: async function (id: string, table: string, query, options) {
+    return await NbStore.indexSearch({
+      id,
+      table,
+      query,
+      options,
+    });
+  },
+  indexAggregate: async function (
+    id: string,
+    table: string,
+    query,
+    field: string,
+    limit: number,
+    offset: number,
+    hits
+  ) {
+    return await NbStore.indexAggregate({
+      id,
+      table,
+      query,
+      field,
+      limit,
+      offset,
+      hits,
+    });
+  },
+  indexDeleteByQuery: async function (
+    id: string,
+    table: string,
+    query
+  ): Promise<number> {
+    const { deleted } = await NbStore.indexDeleteByQuery({
+      id,
+      table,
+      query,
+    });
+    return deleted;
+  },
+  indexFlush: async function (id: string): Promise<void> {
+    await NbStore.indexFlush({
+      id,
+    });
+  },
+  indexVersion: function (): Promise<number> {
+    return NbStore.indexVersion().then(res => res.indexVersion);
+  },
+  getDocIndexedClock: function (
+    id: string,
+    docId: string
+  ): Promise<DocIndexedClock | null> {
+    return NbStore.getDocIndexedClock({ id, docId }).then(clock =>
+      clock ? { ...clock, timestamp: new Date(clock.timestamp) } : null
+    );
+  },
+  setDocIndexedClock: function (
+    id: string,
+    docId: string,
+    indexedClock: Date,
+    indexerVersion: number
+  ): Promise<void> {
+    return NbStore.setDocIndexedClock({
+      id,
+      docId,
+      indexedClock: indexedClock.getTime(),
+      indexerVersion,
+    });
+  },
+  setDocIndexedClocks: function (id, clocks): Promise<void> {
+    return NbStore.setDocIndexedClocks({
+      id,
+      clocks: clocks.map(clock => ({
+        ...clock,
+        timestamp: clock.timestamp.getTime(),
+      })),
+    });
+  },
+  clearDocIndexedClock: function (id: string, docId: string): Promise<void> {
+    return NbStore.clearDocIndexedClock({
+      id,
+      docId,
     });
   },
 };

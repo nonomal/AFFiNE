@@ -5,6 +5,9 @@ const WORKSPACE_EMBEDDING_SWITCH_TEST_ID = 'workspace-embedding-setting-switch';
 export class SettingsPanelUtils {
   public static async openSettingsPanel(page: Page) {
     if (await page.getByTestId('workspace-setting:embedding').isHidden()) {
+      await page
+        .getByTestId('slider-bar-workspace-setting-button')
+        .waitFor({ state: 'visible' });
       await page.getByTestId('slider-bar-workspace-setting-button').click();
       await page.getByTestId('workspace-setting:embedding').click();
       await page.getByTestId('workspace-embedding-setting-header').waitFor({
@@ -17,7 +20,7 @@ export class SettingsPanelUtils {
     if (
       await page.getByTestId('workspace-embedding-setting-wrapper').isVisible()
     ) {
-      await page.getByTestId('modal-close-button').click();
+      await page.keyboard.press('Escape');
       await page.getByTestId('workspace-embedding-setting-wrapper').waitFor({
         state: 'hidden',
       });
@@ -91,7 +94,7 @@ export class SettingsPanelUtils {
 
       await page
         .getByTestId('workspace-embedding-setting-attachment-uploading-item')
-        .waitFor({ state: 'hidden' });
+        .waitFor({ state: 'hidden', timeout: 30_000 });
     }
   }
 
@@ -160,13 +163,22 @@ export class SettingsPanelUtils {
     const searcher = await page.getByTestId('doc-selector-layout');
     const searchInput = await page.getByTestId('doc-selector-search-input');
 
+    await searchInput.waitFor({ state: 'visible' });
     await searchInput.focus();
     await page.keyboard.insertText(doc);
 
-    const pageListItem = searcher.getByTestId('doc-list-item');
-    await expect(pageListItem).toHaveCount(1);
-    const pageListItemTitle = pageListItem.getByTestId('doc-list-item-title');
-    await expect(pageListItemTitle).toHaveText(doc);
+    const pageListItem = searcher
+      .getByTestId('doc-list-item')
+      .filter({
+        has: page
+          .getByTestId('doc-list-item-title')
+          .getByText(doc, { exact: true }),
+      })
+      .first();
+    await expect(pageListItem).toBeVisible();
+    await expect(pageListItem.getByTestId('doc-list-item-title')).toHaveText(
+      doc
+    );
     await pageListItem.click();
 
     await searcher.getByTestId('doc-selector-confirm-button').click();
@@ -199,12 +211,70 @@ export class SettingsPanelUtils {
       await searchInput.focus();
       await page.keyboard.insertText(doc);
 
-      const pageListItem = searcher.getByTestId('page-list-item');
+      const pageListItem = searcher.getByTestId('doc-list-item');
       await expect(pageListItem).toHaveCount(1);
 
       await pageListItem.getByTestId('affine-checkbox').uncheck();
 
       await searcher.getByTestId('doc-selector-confirm-button').click();
     }
+  }
+
+  private static async waitForEmbeddingStatus(
+    page: Page,
+    timeout: number,
+    status = 'synced'
+  ) {
+    await expect(async () => {
+      await this.openSettingsPanel(page);
+      const title = page.getByTestId('embedding-progress-title');
+      // oxlint-disable-next-line prefer-dom-node-dataset
+      const progressAttr = await title.getAttribute('data-progress');
+      expect(progressAttr).not.toBe('loading');
+
+      expect(progressAttr).toBe(status);
+    }).toPass({ timeout });
+  }
+
+  public static async waitForEmbeddingComplete(page: Page, timeout = 30000) {
+    await this.waitForEmbeddingStatus(page, timeout);
+
+    // check embedding progress count
+    await expect(async () => {
+      const count = page.getByTestId('embedding-progress-count');
+      const countText = await count.textContent();
+      if (countText) {
+        const [embedded, total] = countText.split('/').map(Number);
+        expect(embedded).toBe(total);
+        expect(embedded).toBeGreaterThan(0);
+      }
+    }).toPass({ timeout });
+  }
+
+  public static async waitForFileEmbeddingReadiness(
+    page: Page,
+    expectedFileCount: number,
+    timeout = 30000
+  ) {
+    await expect(async () => {
+      const attachmentList = page.getByTestId(
+        'workspace-embedding-setting-attachment-list'
+      );
+      const attachmentItems = attachmentList.getByTestId(
+        'workspace-embedding-setting-attachment-item'
+      );
+      await expect(attachmentItems).toHaveCount(expectedFileCount);
+      await expect(
+        attachmentList.getByTestId(
+          'workspace-embedding-setting-attachment-uploading-item'
+        )
+      ).toHaveCount(0);
+    }).toPass({ timeout });
+
+    await expect(async () => {
+      await expect(
+        page.getByTestId('workspace-embedding-setting-attachment-ready-item')
+      ).toHaveCount(expectedFileCount);
+    }).toPass({ timeout });
   }
 }

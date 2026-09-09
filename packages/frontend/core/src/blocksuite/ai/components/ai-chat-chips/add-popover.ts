@@ -1,7 +1,6 @@
-import { toast } from '@affine/component';
 import type { TagMeta } from '@affine/core/components/page-list';
 import type { CollectionMeta } from '@affine/core/modules/collection';
-import track from '@affine/track';
+import track, { type EventArgs } from '@affine/track';
 import { SignalWatcher, WithDisposable } from '@blocksuite/affine/global/lit';
 import { scrollbarStyle } from '@blocksuite/affine/shared/styles';
 import { unsafeCSSVar, unsafeCSSVarV2 } from '@blocksuite/affine/shared/theme';
@@ -21,8 +20,9 @@ import { css, html, type TemplateResult } from 'lit';
 import { property, query, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 
-import { MAX_IMAGE_COUNT } from '../ai-chat-input';
-import type { ChatChip, DocDisplayConfig, SearchMenuConfig } from './type';
+import type { SearchMenuConfig } from '../ai-chat-add-context';
+import { addFilesToChat } from './attachment-utils';
+import type { ChatChip, DocDisplayConfig } from './type';
 
 enum AddPopoverMode {
   Default = 'default',
@@ -93,6 +93,7 @@ export class ChatPanelAddPopover extends SignalWatcher(
       font-size: var(--affine-font-sm);
       color: ${unsafeCSSVarV2('text/primary')};
       flex-grow: 1;
+      background-color: transparent;
     }
     .search-input-wrapper input::placeholder {
       color: ${unsafeCSSVarV2('text/placeholder')};
@@ -118,6 +119,12 @@ export class ChatPanelAddPopover extends SignalWatcher(
   `;
 
   private accessor _query = '';
+
+  @property({ attribute: false })
+  accessor independentMode: boolean | undefined;
+
+  @property({ attribute: false })
+  accessor docId: string | undefined;
 
   @state()
   private accessor _searchGroups: MenuGroup[] = [];
@@ -164,35 +171,18 @@ export class ChatPanelAddPopover extends SignalWatcher(
     const files = await openFilesWith();
     if (!files || files.length === 0) return;
 
-    const images = files.filter(file => file.type.startsWith('image/'));
-    if (images.length > 0) {
-      this.addImages(images);
-    }
-
-    const others = files.filter(file => !file.type.startsWith('image/'));
-    for (const file of others) {
-      if (file.size > 50 * 1024 * 1024) {
-        toast(`${file.name} is too large, please upload a file less than 50MB`);
-      } else {
-        await this.addChip({
-          file,
-          state: 'processing',
-        });
-      }
-    }
-    this._track('file');
     this.abortController.abort();
+    await addFilesToChat(files, {
+      addImages: this.addImages,
+      addChip: this.addChip,
+    });
+    this._track('file');
   };
 
   private readonly _addImageChip = async () => {
-    if (this.isImageUploadDisabled) return;
-
     const images = await openFilesWith('Images');
     if (!images) return;
-    if (this.uploadImageCount + images.length > MAX_IMAGE_COUNT) {
-      toast(`You can only upload up to ${MAX_IMAGE_COUNT} images`);
-      return;
-    }
+    this.abortController.abort();
     this.addImages(images);
   };
 
@@ -289,9 +279,6 @@ export class ChatPanelAddPopover extends SignalWatcher(
   accessor testId: string = 'ai-search-input';
 
   @property({ attribute: false })
-  accessor isImageUploadDisabled!: boolean;
-
-  @property({ attribute: false })
   accessor uploadImageCount!: number;
 
   @query('.search-input')
@@ -364,12 +351,16 @@ export class ChatPanelAddPopover extends SignalWatcher(
         const items = resolveSignal(group.items);
 
         const menuGroup = html`<div class="menu-group">
-          ${items.length > 0
-            ? this._renderMenuItems(items, startIndex)
-            : (group.noResult?.() ?? this._renderNoResult())}
-          ${idx < groups.length - 1
-            ? (group.divider?.() ?? this._renderDivider())
-            : ''}
+          ${
+            items.length > 0
+              ? this._renderMenuItems(items, startIndex)
+              : (group.noResult?.() ?? this._renderNoResult())
+          }
+          ${
+            idx < groups.length - 1
+              ? (group.divider?.() ?? this._renderDivider())
+              : ''
+          }
         </div>`;
         startIndex += items.length;
         return menuGroup;
@@ -497,31 +488,32 @@ export class ChatPanelAddPopover extends SignalWatcher(
   }
 
   private readonly _addDocChip = async (meta: DocMeta) => {
+    this.abortController.abort();
     await this.addChip({
       docId: meta.id,
-      state: 'processing',
+      state: 'finished',
     });
     const mode = this.docDisplayConfig.getDocPrimaryMode(meta.id);
-    this._track('doc', mode);
-    this.abortController.abort();
+    const method = meta.id === this.docId ? 'cur-doc' : 'doc';
+    this._track(method, mode);
   };
 
   private readonly _addTagChip = async (tag: TagMeta) => {
+    this.abortController.abort();
     await this.addChip({
       tagId: tag.id,
-      state: 'processing',
+      state: 'finished',
     });
     this._track('tags');
-    this.abortController.abort();
   };
 
   private readonly _addCollectionChip = async (collection: CollectionMeta) => {
+    this.abortController.abort();
     await this.addChip({
       collectionId: collection.id,
-      state: 'processing',
+      state: 'finished',
     });
     this._track('collections');
-    this.abortController.abort();
   };
 
   private readonly _handleKeyDown = (event: KeyboardEvent) => {
@@ -567,10 +559,13 @@ export class ChatPanelAddPopover extends SignalWatcher(
   }
 
   private _track(
-    method: 'doc' | 'file' | 'tags' | 'collections',
+    method: EventArgs['addEmbeddingDoc']['method'],
     type?: 'page' | 'edgeless'
   ) {
-    track.$.chatPanel.chatPanelInput.addEmbeddingDoc({
+    const page = this.independentMode
+      ? track.$.intelligence
+      : track.$.chatPanel;
+    page.chatPanelInput.addEmbeddingDoc({
       control: 'addButton',
       method,
       type,

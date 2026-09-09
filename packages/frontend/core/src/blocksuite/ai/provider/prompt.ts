@@ -3,7 +3,6 @@
 export const promptKeys = [
   // text actions
   'Chat With AFFiNE AI',
-  'Search With AFFiNE AI',
   'Summary',
   'Summary as title',
   'Generate a caption',
@@ -40,9 +39,13 @@ export const promptKeys = [
   'Convert to sticker',
   'Upscale image',
   'Remove background',
-  // workflows
-  'workflow:presentation',
-  'workflow:brainstorm',
+  // actions
+  'mindmap.generate',
+  'slides.outline',
+  'image.filter.sketch',
+  'image.filter.clay',
+  'image.filter.anime',
+  'image.filter.pixel',
 ] as const;
 
 export type PromptKey = (typeof promptKeys)[number];

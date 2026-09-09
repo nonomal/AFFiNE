@@ -43,6 +43,7 @@ export const SelfHostTeamCard = () => {
   const [loading, setLoading] = useState(false);
   const selfhostLicenseService = useService(SelfhostLicenseService);
   const license = useLiveData(selfhostLicenseService.license$);
+  const hasLicense = !!license;
   const isOneTimePurchase = license?.variant === SubscriptionVariant.Onetime;
 
   const revalidate = useCallback(() => {
@@ -73,6 +74,7 @@ export const SelfHostTeamCard = () => {
                 license?.expiredAt || 0
               ).toLocaleDateString(),
               leftDays: Math.floor(
+                // oxlint-disable-next-line react-hooks-js/purity
                 (new Date(license?.expiredAt || 0).getTime() - Date.now()) /
                   (1000 * 60 * 60 * 24)
               ).toLocaleString(),
@@ -164,13 +166,13 @@ export const SelfHostTeamCard = () => {
 
   const handleConfirm = useCallback(
     (license: string) => {
-      if (isTeam) {
+      if (hasLicense) {
         onDeactivate();
       } else {
         onActivate(license);
       }
     },
-    [isTeam, onActivate, onDeactivate]
+    [hasLicense, onActivate, onDeactivate]
   );
 
   return (
@@ -205,10 +207,10 @@ export const SelfHostTeamCard = () => {
         </div>
         <div
           className={clsx(styles.buttonContainer, {
-            left: isTeam || isLocalWorkspace,
+            left: hasLicense || isLocalWorkspace,
           })}
         >
-          {!isTeam && !isLocalWorkspace ? (
+          {!hasLicense && !isLocalWorkspace ? (
             <Button
               variant="plain"
               className={styles.uploadButton}
@@ -225,7 +227,7 @@ export const SelfHostTeamCard = () => {
             onClick={handleClick}
           >
             {t[
-              `com.affine.settings.workspace.license.self-host-team.${isTeam ? 'deactivate-license' : 'use-purchased-key'}`
+              `com.affine.settings.workspace.license.self-host-team.${hasLicense ? 'deactivate-license' : 'use-purchased-key'}`
             ]()}
           </Button>
         </div>
@@ -233,7 +235,7 @@ export const SelfHostTeamCard = () => {
       <ActionModal
         open={openModal}
         onOpenChange={setOpenModal}
-        isTeam={!!isTeam}
+        hasLicense={hasLicense}
         loading={loading}
         onConfirm={handleConfirm}
         isOneTimePurchase={isOneTimePurchase}
@@ -249,14 +251,14 @@ export const SelfHostTeamCard = () => {
 const ActionModal = ({
   open,
   onOpenChange,
-  isTeam,
+  hasLicense,
   onConfirm,
   loading,
   isOneTimePurchase,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  isTeam: boolean;
+  hasLicense: boolean;
   loading: boolean;
   isOneTimePurchase: boolean;
   onConfirm: (key: string) => void;
@@ -305,7 +307,7 @@ const ActionModal = ({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  if (isTeam && isOneTimePurchase) {
+  if (hasLicense && isOneTimePurchase) {
     return (
       <ConfirmModal
         width={480}
@@ -333,7 +335,7 @@ const ActionModal = ({
     );
   }
 
-  if (isTeam) {
+  if (hasLicense) {
     return (
       <Modal
         width={480}
@@ -398,7 +400,7 @@ const ActionModal = ({
       confirmButtonOptions={{
         loading: loading,
         variant: 'primary',
-        disabled: loading || (!isTeam && !key),
+        disabled: loading || !key,
       }}
       onConfirm={handleConfirm}
       childrenContentClassName={styles.activateModalContent}

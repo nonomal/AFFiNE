@@ -5,12 +5,14 @@ import { fixUrl, OriginRules } from './utils';
 
 @Injectable()
 export class WorkerService {
-  allowedOrigins: OriginRules = [this.url.origin];
+  allowedOrigins: OriginRules;
 
   constructor(
     private readonly config: Config,
     private readonly url: URLHelper
-  ) {}
+  ) {
+    this.allowedOrigins = [...this.url.allowedOrigins];
+  }
 
   @OnEvent('config.init')
   onConfigInit() {
@@ -18,7 +20,7 @@ export class WorkerService {
       ...this.config.worker.allowedOrigin
         .map(u => fixUrl(u)?.origin as string)
         .filter(v => !!v),
-      this.url.origin,
+      ...this.url.allowedOrigins,
     ];
   }
 

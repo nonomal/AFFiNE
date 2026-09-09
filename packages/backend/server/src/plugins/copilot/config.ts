@@ -1,21 +1,61 @@
+import serverNativeModule from '@affine/server-native';
+
 import {
-  defineModuleConfig,
+  defineNativeModuleConfig,
   StorageJSONSchema,
   StorageProviderConfig,
 } from '../../base';
-import {
-  AnthropicOfficialConfig,
-  AnthropicVertexConfig,
-} from './providers/anthropic';
-import type { FalConfig } from './providers/fal';
-import { GeminiGenerativeConfig, GeminiVertexConfig } from './providers/gemini';
-import { OpenAIConfig } from './providers/openai';
-import { PerplexityConfig } from './providers/perplexity';
-import { VertexSchema } from './providers/types';
+import { CopilotProviderType } from './providers/types';
+
+export type ProviderSpecificConfig = Record<string, unknown>;
+
+export type RustRequestMiddleware =
+  | 'normalize_messages'
+  | 'clamp_max_tokens'
+  | 'tool_schema_rewrite'
+  | 'openai_request_compat'
+  | 'omit_tool_choice';
+
+export type RustStreamMiddleware =
+  | 'stream_event_normalize'
+  | 'citation_indexing';
+
+export type NodeTextMiddleware =
+  | 'citation_footnote'
+  | 'callout'
+  | 'thinking_format';
+
+export type ProviderMiddlewareConfig = {
+  rust?: { request?: RustRequestMiddleware[]; stream?: RustStreamMiddleware[] };
+  node?: { text?: NodeTextMiddleware[] };
+};
+
+type CopilotProviderProfileCommon = {
+  id: string;
+  displayName?: string;
+  priority?: number;
+  enabled?: boolean;
+  models?: string[];
+  middleware?: ProviderMiddlewareConfig;
+};
+
+export type CopilotProviderProfile = CopilotProviderProfileCommon & {
+  type: CopilotProviderType;
+  config: ProviderSpecificConfig;
+};
+
 declare global {
   interface AppConfigSchema {
     copilot: {
       enabled: boolean;
+      byok: {
+        enabled: ConfigItem<boolean>;
+        allowedProviders: ConfigItem<
+          Array<'openai' | 'anthropic' | 'gemini' | 'fal'>
+        >;
+        allowCustomEndpoint: ConfigItem<boolean>;
+        allowPrivateEndpoint: ConfigItem<boolean>;
+      };
       unsplash: ConfigItem<{
         key: string;
       }>;
@@ -24,85 +64,43 @@ declare global {
       }>;
       storage: ConfigItem<StorageProviderConfig>;
       providers: {
-        openai: ConfigItem<OpenAIConfig>;
-        fal: ConfigItem<FalConfig>;
-        gemini: ConfigItem<GeminiGenerativeConfig>;
-        geminiVertex: ConfigItem<GeminiVertexConfig>;
-        perplexity: ConfigItem<PerplexityConfig>;
-        anthropic: ConfigItem<AnthropicOfficialConfig>;
-        anthropicVertex: ConfigItem<AnthropicVertexConfig>;
+        profiles: ConfigItem<CopilotProviderProfile[]>;
       };
     };
   }
 }
 
-defineModuleConfig('copilot', {
-  enabled: {
-    desc: 'Whether to enable the copilot plugin.',
-    default: false,
-  },
-  'providers.openai': {
-    desc: 'The config for the openai provider.',
-    default: {
-      apiKey: '',
+defineNativeModuleConfig(
+  'copilot',
+  serverNativeModule.appConfigDescriptors('copilot'),
+  serverNativeModule.validateAppConfigValue,
+  {
+    enabled: {
+      desc: 'Enable AI features. Workspace owners configure provider keys in Workspace Settings → Integrations → AI BYOK.',
+      default: false,
     },
-    link: 'https://github.com/openai/openai-node',
-  },
-  'providers.fal': {
-    desc: 'The config for the fal provider.',
-    default: {
-      apiKey: '',
-    },
-  },
-  'providers.gemini': {
-    desc: 'The config for the gemini provider.',
-    default: {
-      apiKey: '',
-    },
-  },
-  'providers.geminiVertex': {
-    desc: 'The config for the gemini provider in Google Vertex AI.',
-    default: {},
-    schema: VertexSchema,
-  },
-  'providers.perplexity': {
-    desc: 'The config for the perplexity provider.',
-    default: {
-      apiKey: '',
-    },
-  },
-  'providers.anthropic': {
-    desc: 'The config for the anthropic provider.',
-    default: {
-      apiKey: '',
-    },
-  },
-  'providers.anthropicVertex': {
-    desc: 'The config for the anthropic provider in Google Vertex AI.',
-    default: {},
-    schema: VertexSchema,
-  },
-  unsplash: {
-    desc: 'The config for the unsplash key.',
-    default: {
-      key: '',
-    },
-  },
-  exa: {
-    desc: 'The config for the exa web search key.',
-    default: {
-      key: '',
-    },
-  },
-  storage: {
-    desc: 'The config for the storage provider.',
-    default: {
-      provider: 'fs',
-      bucket: 'copilot',
-      config: {
-        path: '~/.affine/storage',
+    unsplash: {
+      desc: 'The config for the unsplash key.',
+      default: {
+        key: '',
       },
     },
-    schema: StorageJSONSchema,
-  },
-});
+    exa: {
+      desc: 'The config for the exa web search key.',
+      default: {
+        key: '',
+      },
+    },
+    storage: {
+      desc: 'The config for the storage provider.',
+      default: {
+        provider: 'fs',
+        bucket: 'copilot',
+        config: {
+          path: '~/.affine/storage',
+        },
+      },
+      schema: StorageJSONSchema,
+    },
+  }
+);

@@ -27,7 +27,7 @@ import { styleMap } from 'lit/directives/style-map.js';
 import { literal, unsafeStatic } from 'lit/static-html.js';
 
 import type { AIItemGroupConfig } from '../../components/ai-item/types.js';
-import { AIProvider } from '../../provider/index.js';
+import { AIAppEvents } from '../../provider/index.js';
 import { extractSelectedContent } from '../../utils/extract.js';
 import {
   AFFINE_AI_PANEL_WIDGET,
@@ -53,6 +53,8 @@ export class EdgelessCopilotWidget extends WidgetComponent<RootBlockModel> {
   private _listenClickOutsideId: number | null = null;
 
   private _selectionModelRect!: DOMRect;
+
+  private _autoUpdateCleanup: (() => void) | null = null;
 
   groups: AIItemGroupConfig[] = [];
 
@@ -104,7 +106,7 @@ export class EdgelessCopilotWidget extends WidgetComponent<RootBlockModel> {
             aiPanel.hide();
             extractSelectedContent(this.host)
               .then(context => {
-                AIProvider.slots.requestSendWithChat.next({
+                AIAppEvents.requestSendWithChat.next({
                   input,
                   context,
                   host: this.host,
@@ -145,7 +147,8 @@ export class EdgelessCopilotWidget extends WidgetComponent<RootBlockModel> {
 
     const originMaxHeight = window.getComputedStyle(panel).maxHeight;
 
-    autoUpdate(referenceElement, panel, () => {
+    this._autoUpdateCleanup?.();
+    this._autoUpdateCleanup = autoUpdate(referenceElement, panel, () => {
       computePosition(referenceElement, panel, {
         placement: 'bottom-start',
         middleware: [
@@ -267,6 +270,8 @@ export class EdgelessCopilotWidget extends WidgetComponent<RootBlockModel> {
         this._copilotPanel = null;
       })
     );
+
+    this._disposables.add(() => this._autoUpdateCleanup?.());
   }
 
   determineInsertionBounds(width = 800, height = 95) {

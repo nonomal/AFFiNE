@@ -73,11 +73,13 @@ export function OAuth({ redirectUrl }: { redirectUrl?: string }) {
               params.set('redirect_uri', redirectUrl);
             }
 
+            params.set('flow', 'redirect');
+
             const oauthUrl =
               serverService.server.baseUrl +
               `/oauth/login?${params.toString()}`;
 
-            urlService.openPopupWindow(oauthUrl);
+            urlService.openExternal(oauthUrl);
           };
 
       const ret = open();
@@ -110,7 +112,10 @@ interface OauthProviderProps {
 }
 
 function OAuthProvider({ onContinue, provider }: OauthProviderProps) {
-  const { icon } = OAuthProviderMap[provider];
+  const { icon } =
+    provider in OAuthProviderMap
+      ? OAuthProviderMap[provider]
+      : { icon: undefined };
 
   const onClick = useCallback(() => {
     onContinue(provider);

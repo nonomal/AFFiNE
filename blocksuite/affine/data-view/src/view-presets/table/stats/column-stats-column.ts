@@ -57,12 +57,12 @@ const styles = css`
     margin-inline: 5px;
   }
 
-  .label {
+  .stats-cell .label {
     text-transform: uppercase;
     color: var(--affine-text-secondary-color);
   }
 
-  .value {
+  .stats-cell .value {
     color: var(--affine-text-primary-color);
   }
 `;
@@ -225,12 +225,14 @@ export class DatabaseColumnStatsCell extends SignalWatcher(
       class="stats-cell"
     >
       <div class="content">
-        ${!this.statsResult$.value
-          ? html`Calculate ${ArrowDownSmallIcon()}`
-          : html`
-              <span class="label">${this.statsResult$.value.name}</span>
-              <span class="value">${this.statsResult$.value.value} </span>
-            `}
+        ${
+          !this.statsResult$.value
+            ? html`Calculate ${ArrowDownSmallIcon()}`
+            : html`
+                <span class="label">${this.statsResult$.value.name}</span>
+                <span class="value">${this.statsResult$.value.value} </span>
+              `
+        }
       </div>
     </div>`;
   }

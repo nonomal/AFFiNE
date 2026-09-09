@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import pkg from '../package.json' with { type: 'json' };
 
 declare global {
+  // oxlint-disable-next-line no-shadow-restricted-names
   namespace globalThis {
     // oxlint-disable-next-line no-var
     var env: Readonly<Env>;
@@ -12,6 +13,8 @@ declare global {
     var readEnv: <T>(key: string, defaultValue: T, availableValues?: T[]) => T;
     // oxlint-disable-next-line no-var
     var CUSTOM_CONFIG_PATH: string;
+    // oxlint-disable-next-line no-var
+    var CLS_REQUEST_HOST: 'CLS_REQUEST_HOST';
   }
 }
 
@@ -20,8 +23,16 @@ export enum Flavor {
   Graphql = 'graphql',
   Sync = 'sync',
   Renderer = 'renderer',
-  Doc = 'doc',
+  Front = 'front',
+  Worker = 'worker',
   Script = 'script',
+}
+
+export enum ServerRole {
+  Frontend = 'frontend',
+  Api = 'api',
+  Worker = 'worker',
+  AllInOne = 'allinone',
 }
 
 export enum Namespace {
@@ -53,6 +64,7 @@ export type AppEnv = {
   version: string;
 };
 
+globalThis.CLS_REQUEST_HOST = 'CLS_REQUEST_HOST';
 globalThis.CUSTOM_CONFIG_PATH = join(homedir(), '.affine/config');
 globalThis.readEnv = function readEnv<T>(
   env: string,
@@ -96,6 +108,39 @@ export class Env implements AppEnv {
     return this.DEPLOYMENT_TYPE === DeploymentType.Selfhosted;
   }
 
+  get role(): ServerRole | undefined {
+    switch (this.FLAVOR) {
+      case Flavor.AllInOne:
+        return ServerRole.AllInOne;
+      case Flavor.Graphql:
+        return ServerRole.Api;
+      case Flavor.Worker:
+        return ServerRole.Worker;
+      case Flavor.Front:
+      case Flavor.Sync:
+      case Flavor.Renderer:
+        return ServerRole.Frontend;
+      case Flavor.Script:
+        return undefined;
+    }
+  }
+
+  get isApi() {
+    return this.FLAVOR === Flavor.Graphql || this.FLAVOR === Flavor.AllInOne;
+  }
+
+  get isWorker() {
+    return this.FLAVOR === Flavor.Worker || this.FLAVOR === Flavor.AllInOne;
+  }
+
+  get isFrontend() {
+    return (
+      this.FLAVOR === Flavor.Front ||
+      this.FLAVOR === Flavor.Sync ||
+      this.FLAVOR === Flavor.Renderer
+    );
+  }
+
   isFlavor(flavor: Flavor) {
     return this.FLAVOR === flavor || this.FLAVOR === Flavor.AllInOne;
   }
@@ -105,7 +150,8 @@ export class Env implements AppEnv {
       graphql: this.isFlavor(Flavor.Graphql),
       sync: this.isFlavor(Flavor.Sync),
       renderer: this.isFlavor(Flavor.Renderer),
-      doc: this.isFlavor(Flavor.Doc),
+      front: this.FLAVOR === Flavor.Front,
+      worker: this.isFlavor(Flavor.Worker),
       // Script in a special flavor, return true only when it is set explicitly
       script: this.FLAVOR === Flavor.Script,
     };

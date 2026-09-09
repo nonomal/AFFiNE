@@ -18,9 +18,11 @@ export class TableGroupFooter extends WithDisposable(ShadowlessElement) {
   accessor gridGroup!: TableGridGroup;
 
   group$ = computed(() => {
-    return this.tableViewLogic.groupTrait$.value?.groupsDataList$.value?.find(
-      g => g.key === this.gridGroup.groupId
-    );
+    const groups =
+      this.tableViewLogic.groupTrait$.value?.groupsDataList$.value ?? [];
+    return groups
+      .filter((group): group is NonNullable<typeof group> => group != null)
+      .find(g => g.key === this.gridGroup.groupId);
   });
 
   get selectionController() {
@@ -72,24 +74,26 @@ export class TableGroupFooter extends WithDisposable(ShadowlessElement) {
 
   override render() {
     return html`
-      ${this.tableViewManager.readonly$.value
-        ? null
-        : html`
-            <div
-              class="${styles.addRowWrapper} dv-hover"
-              @click="${this.clickAddRow}"
-            >
+      ${
+        this.tableViewManager.readonly$.value
+          ? null
+          : html`
               <div
-                class="${styles.addRowButton} dv-icon-16"
-                data-test-id="affine-database-add-row-button"
-                role="button"
+                class="${styles.addRowWrapper} dv-hover"
+                @click="${this.clickAddRow}"
               >
-                ${PlusIcon()}<span class="${styles.addRowText}"
-                  >New Record</span
+                <div
+                  class="${styles.addRowButton} dv-icon-16"
+                  data-test-id="affine-database-add-row-button"
+                  role="button"
                 >
+                  ${PlusIcon()}<span class="${styles.addRowText}"
+                    >New Record</span
+                  >
+                </div>
               </div>
-            </div>
-          `}
+            `
+      }
       <affine-database-virtual-column-stats
         .view="${this.tableViewManager}"
         .group="${this.group$.value}"

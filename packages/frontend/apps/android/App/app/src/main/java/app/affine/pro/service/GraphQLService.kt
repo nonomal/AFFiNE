@@ -3,13 +3,14 @@ package app.affine.pro.service
 import app.affine.pro.Prompt
 import app.affine.pro.utils.getCurrentServerBaseUrl
 import com.affine.pro.graphql.CreateCopilotMessageMutation
-import com.affine.pro.graphql.CreateCopilotSessionMutation
+import com.affine.pro.graphql.CreateCopilotSessionWithHistoryMutation
 import com.affine.pro.graphql.GetCopilotHistoriesQuery
 import com.affine.pro.graphql.GetCopilotHistoryIdsQuery
 import com.affine.pro.graphql.GetCopilotSessionsQuery
 import com.affine.pro.graphql.type.CreateChatMessageInput
 import com.affine.pro.graphql.type.CreateChatSessionInput
-import com.affine.pro.graphql.type.QueryChatSessionsInput
+import com.affine.pro.graphql.type.PaginationInput
+import com.affine.pro.graphql.type.QueryChatHistoriesInput
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Mutation
 import com.apollographql.apollo.api.Optional
@@ -29,12 +30,15 @@ class GraphQLService @Inject constructor() {
         GetCopilotSessionsQuery(
             workspaceId = workspaceId,
             docId = Optional.present(docId),
-            options = Optional.present(QueryChatSessionsInput(action = Optional.present(false)))
+            pagination = PaginationInput(
+              first = Optional.present(100)
+            ),
+            options = Optional.present(QueryChatHistoriesInput(action = Optional.present(false)))
         )
     ).mapCatching { data ->
-        data.currentUser?.copilot?.sessions?.find {
+        data.currentUser?.copilot?.chats?.paginatedCopilotChats?.edges?.map { item -> item.node.copilotChatHistory }?.find {
             it.parentSessionId == null
-        }?.id ?: error(ERROR_NULL_SESSION_ID)
+        }?.sessionId ?: error(ERROR_NULL_SESSION_ID)
     }
 
     suspend fun createCopilotSession(
@@ -42,15 +46,15 @@ class GraphQLService @Inject constructor() {
         docId: String,
         prompt: Prompt = Prompt.ChatWithAFFiNEAI
     ) = mutation(
-        CreateCopilotSessionMutation(
+        CreateCopilotSessionWithHistoryMutation(
             CreateChatSessionInput(
-                docId = docId,
+                docId = Optional.present(docId),
                 workspaceId = workspaceId,
                 promptName = prompt.value
             )
         )
     ).mapCatching { data ->
-        data.createCopilotSession
+        data.createCopilotSessionWithHistory.copilotChatHistory.sessionId
     }
 
     suspend fun getCopilotHistories(
@@ -60,11 +64,14 @@ class GraphQLService @Inject constructor() {
     ) = query(
         GetCopilotHistoriesQuery(
             workspaceId = workspaceId,
+            pagination = PaginationInput(
+              first = Optional.present(100)
+            ),
             docId = Optional.present(docId),
         )
     ).mapCatching { data ->
-        data.currentUser?.copilot?.histories?.firstOrNull { history ->
-            history.sessionId == sessionId
+        data.currentUser?.copilot?.chats?.paginatedCopilotChats?.edges?.map { item -> item.node.copilotChatHistory }?.firstOrNull { history ->
+          history.sessionId == sessionId
         }?.messages ?: emptyList()
     }
 
@@ -76,9 +83,12 @@ class GraphQLService @Inject constructor() {
         GetCopilotHistoryIdsQuery(
             workspaceId = workspaceId,
             docId = Optional.present(docId),
+            pagination = PaginationInput(
+              first = Optional.present(100)
+            ),
         )
     ).mapCatching { data ->
-        data.currentUser?.copilot?.histories?.firstOrNull { history ->
+        data.currentUser?.copilot?.chats?.edges?.map { item -> item.node }?.firstOrNull { history ->
             history.sessionId == sessionId
         }?.messages ?: emptyList()
     }

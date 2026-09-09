@@ -10,7 +10,6 @@ import { type I18nString, i18nTime, Trans, useI18n } from '@affine/i18n';
 import { useLiveData, useService } from '@toeverything/infra';
 import { useEffect } from 'react';
 
-import { RedeemCode } from '../plans/plan-card';
 import { CardNameLabelRow } from './card-name-label-row';
 import { PaymentMethodUpdater } from './payment-method';
 import * as styles from './style.css';
@@ -89,13 +88,13 @@ export const ProPlanCard = ({
                 }}
               />
               <CloudExpirationInfo />
+              <PlanAction
+                plan={currentPlan}
+                subscriptionStatus={proSubscription?.status}
+                gotoPlansSetting={gotoCloudPlansSetting}
+              />
             </>
           }
-        />
-        <PlanAction
-          plan={currentPlan}
-          subscriptionStatus={proSubscription?.status}
-          gotoPlansSetting={gotoCloudPlansSetting}
         />
       </div>
       <p className={styles.planPrice}>
@@ -157,18 +156,15 @@ const PlanAction = ({
 }) => {
   const t = useI18n();
 
-  const subscription = useService(SubscriptionService).subscription;
-  const isOnetimePro = useLiveData(subscription.isOnetimePro$);
-
-  if (isOnetimePro) {
-    return <RedeemCode variant="primary" className={styles.planAction} />;
-  }
-
   return (
-    <>
+    <div className={styles.planActionContainer}>
       <Button
         className={styles.planAction}
-        variant="primary"
+        variant={
+          subscriptionStatus === SubscriptionStatus.PastDue
+            ? 'secondary'
+            : 'primary'
+        }
         onClick={gotoPlansSetting}
       >
         {plan === SubscriptionPlan.Pro
@@ -178,10 +174,10 @@ const PlanAction = ({
       {subscriptionStatus === SubscriptionStatus.PastDue ? (
         <PaymentMethodUpdater
           inCardView
-          className={styles.manageMentInCard}
+          className={styles.managementInCard}
           variant="primary"
         />
       ) : null}
-    </>
+    </div>
   );
 };

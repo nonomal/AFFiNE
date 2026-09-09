@@ -36,6 +36,11 @@ test.describe('AIChatWith/Image', () => {
         status: 'success',
       },
     ]);
+
+    await expect(async () => {
+      const { content } = await utils.chatPanel.getLatestAssistantMessage(page);
+      expect(content).toMatch(/cat|kitten|feline|tabby|fluffy/i);
+    }).toPass({ timeout: 20000 });
   });
 
   test('support chat with mutiple images', async ({

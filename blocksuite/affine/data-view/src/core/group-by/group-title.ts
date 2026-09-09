@@ -26,13 +26,10 @@ const GroupTitleMobile = (
   const type = groupData.tType;
   if (!type) return nothing;
 
-  const icon =
-    groupData.value == null
-      ? ''
-      : html` <uni-lit
-          class="group-header-icon"
-          .uni="${groupData.property.icon}"
-        ></uni-lit>`;
+  const icon = html` <uni-lit
+    class="group-header-icon"
+    .uni="${groupData.property.icon}"
+  ></uni-lit>`;
   const props: GroupRenderProps = {
     group: groupData,
     readonly: ops.readonly,
@@ -99,16 +96,18 @@ const GroupTitleMobile = (
       ${icon} ${renderUniLit(groupData.view, props)} ${columnName}
       ${GroupHeaderCount(groupData)}
     </div>
-    ${ops.readonly
-      ? nothing
-      : html` <div class="group-header-ops">
-          <div @click="${ops.clickAdd}" class="group-header-op add-card">
-            ${PlusIcon()}
-          </div>
-          <div @click="${ops.clickOps}" class="group-header-op">
-            ${MoreHorizontalIcon()}
-          </div>
-        </div>`}
+    ${
+      ops.readonly
+        ? nothing
+        : html` <div class="group-header-ops">
+            <div @click="${ops.clickAdd}" class="group-header-op add-card">
+              ${PlusIcon()}
+            </div>
+            <div @click="${ops.clickOps}" class="group-header-op">
+              ${MoreHorizontalIcon()}
+            </div>
+          </div>`
+    }
   `;
 };
 
@@ -126,13 +125,10 @@ export const GroupTitle = (
   const type = groupData.tType;
   if (!type) return nothing;
 
-  const icon =
-    groupData.value == null
-      ? ''
-      : html` <uni-lit
-          class="group-header-icon"
-          .uni="${groupData.property.icon}"
-        ></uni-lit>`;
+  const icon = html` <uni-lit
+    class="group-header-icon"
+    .uni="${groupData.property.icon}"
+  ></uni-lit>`;
   const props: GroupRenderProps = {
     group: groupData,
     readonly: ops.readonly,
@@ -217,15 +213,17 @@ export const GroupTitle = (
       ${icon} ${renderUniLit(groupData.view, props)} ${columnName}
       ${GroupHeaderCount(groupData)}
     </div>
-    ${ops.readonly
-      ? nothing
-      : html` <div class="group-header-ops">
-          <div @click="${ops.clickAdd}" class="group-header-op add-card">
-            ${PlusIcon()}
-          </div>
-          <div @click="${ops.clickOps}" class="group-header-op">
-            ${MoreHorizontalIcon()}
-          </div>
-        </div>`}
+    ${
+      ops.readonly
+        ? nothing
+        : html` <div class="group-header-ops">
+            <div @click="${ops.clickAdd}" class="group-header-op add-card">
+              ${PlusIcon()}
+            </div>
+            <div @click="${ops.clickOps}" class="group-header-op">
+              ${MoreHorizontalIcon()}
+            </div>
+          </div>`
+    }
   `;
 };

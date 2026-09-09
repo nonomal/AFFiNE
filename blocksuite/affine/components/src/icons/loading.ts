@@ -18,6 +18,7 @@ export const LoadingIcon = ({
     viewBox="0 0 24 24"
     xmlns="http://www.w3.org/2000/svg"
     fill="none"
+    style="fill: none;"
   >
     <style>
       .spinner {
@@ -39,9 +40,8 @@ export const LoadingIcon = ({
       stroke="${strokeColor}"
       stroke-width="4"
       stroke-linecap="round"
-      stroke-dasharray="${2 * Math.PI * 8 * progress} ${2 *
-      Math.PI *
-      8 *
-      (1 - progress)}"
+      stroke-dasharray="${2 * Math.PI * 8 * progress} ${
+        2 * Math.PI * 8 * (1 - progress)
+      }"
     />
   </svg>`;

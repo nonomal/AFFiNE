@@ -170,7 +170,7 @@ export const QuickDelete = memo(function QuickDelete({
               toast(t['com.affine.no-permission']());
               return;
             }
-            doc.moveToTrash();
+            await doc.moveToTrash();
           } catch (error) {
             console.error(error);
             const userFriendlyError = UserFriendlyError.fromAny(error);
@@ -210,9 +210,11 @@ export const QuickSelect = memo(function QuickSelect({
 
   const onChange = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
+      contextValue.selectMode$?.next(true);
       onClick?.(e);
       e.stopPropagation();
       e.preventDefault();
+      contextValue.selectMode$?.next(true);
       contextValue.selectedDocIds$?.next(
         selected
           ? selectedDocIds.filter(id => id !== doc.id)
@@ -249,20 +251,18 @@ export const QuickDeletePermanently = memo(function QuickDeletePermanently({
   );
   const { openConfirmModal } = useConfirmModal();
 
-  const handleDeletePermanently = useCallback(() => {
-    guardService
-      .can('Doc_Delete', doc.id)
-      .then(can => {
-        if (can) {
-          permanentlyDeletePage(doc.id);
-          toast(t['com.affine.toastMessage.permanentlyDeleted']());
-        } else {
-          toast(t['com.affine.no-permission']());
-        }
-      })
-      .catch(e => {
-        console.error(e);
-      });
+  const handleDeletePermanently = useCallback(async () => {
+    try {
+      const canDelete = await guardService.can('Doc_Delete', doc.id);
+      if (canDelete) {
+        await permanentlyDeletePage(doc.id);
+        toast(t['com.affine.toastMessage.permanentlyDeleted']());
+      } else {
+        toast(t['com.affine.no-permission']());
+      }
+    } catch (error) {
+      console.error(error);
+    }
   }, [doc.id, guardService, permanentlyDeletePage, t]);
 
   const handleConfirmDeletePermanently = useCallback(
@@ -317,9 +317,9 @@ export const QuickRestore = memo(function QuickRestore({
       e.preventDefault();
       guardService
         .can('Doc_Delete', doc.id)
-        .then(can => {
+        .then(async can => {
           if (can) {
-            restoreFromTrash(doc.id);
+            await restoreFromTrash(doc.id);
             toast(
               t['com.affine.toastMessage.restored']({
                 title: doc.title$.value || 'Untitled',
@@ -329,8 +329,8 @@ export const QuickRestore = memo(function QuickRestore({
             toast(t['com.affine.no-permission']());
           }
         })
-        .catch(e => {
-          console.error(e);
+        .catch(error => {
+          console.error(error);
         });
     },
     [doc.id, doc.title$, guardService, onClick, restoreFromTrash, t]

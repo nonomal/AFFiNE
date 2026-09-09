@@ -3,6 +3,8 @@ import { DisposableGroup } from '@blocksuite/global/disposable';
 import type { ReactiveController } from 'lit';
 
 import { TableViewAreaSelection, TableViewRowSelection } from '../../selection';
+import { handleCharStartEdit } from '../../utils.js';
+import type { DatabaseCellContainer } from '../row/cell.js';
 import { popRowMenu } from '../row/menu';
 import type { VirtualTableViewUILogic } from '../table-view-ui-logic';
 
@@ -18,60 +20,62 @@ export class TableHotkeysController implements ReactiveController {
     return this.logic.ui$.value;
   }
 
+  private _handleDeleteOrBackspace() {
+    const selection = this.selectionController.selection;
+    if (!selection) {
+      return;
+    }
+    if (TableViewRowSelection.is(selection)) {
+      const rows = TableViewRowSelection.rowsIds(selection);
+      this.selectionController.selection = undefined;
+      this.logic.view.rowsDelete(rows);
+      this.logic.ui$.value?.requestUpdate();
+      return;
+    }
+    const { focus, rowsSelection, columnsSelection, isEditing, groupKey } =
+      selection;
+    if (focus && !isEditing) {
+      if (rowsSelection && columnsSelection) {
+        // multi cell
+        for (let i = rowsSelection.start; i <= rowsSelection.end; i++) {
+          const { start, end } = columnsSelection;
+          for (let j = start; j <= end; j++) {
+            const container = this.selectionController.getCellContainer(
+              groupKey,
+              i,
+              j
+            );
+            const rowId = container?.dataset.rowId;
+            const columnId = container?.dataset.columnId;
+            if (rowId && columnId) {
+              container?.column$.value?.valueSetFromString(rowId, '');
+            }
+          }
+        }
+      } else {
+        // single cell
+        const container = this.selectionController.getCellContainer(
+          groupKey,
+          focus.rowIndex,
+          focus.columnIndex
+        );
+        const rowId = container?.dataset.rowId;
+        const columnId = container?.dataset.columnId;
+        if (rowId && columnId) {
+          container?.column$.value?.valueSetFromString(rowId, '');
+        }
+      }
+    }
+  }
+
   hostConnected() {
     this.disposables.add(
       this.logic.bindHotkey({
         Backspace: () => {
-          const selection = this.selectionController.selection;
-          if (!selection) {
-            return;
-          }
-          if (TableViewRowSelection.is(selection)) {
-            const rows = TableViewRowSelection.rowsIds(selection);
-            this.selectionController.selection = undefined;
-            this.logic.view.rowsDelete(rows);
-            this.logic.ui$.value?.requestUpdate();
-            return;
-          }
-          const {
-            focus,
-            rowsSelection,
-            columnsSelection,
-            isEditing,
-            groupKey,
-          } = selection;
-          if (focus && !isEditing) {
-            if (rowsSelection && columnsSelection) {
-              // multi cell
-              for (let i = rowsSelection.start; i <= rowsSelection.end; i++) {
-                const { start, end } = columnsSelection;
-                for (let j = start; j <= end; j++) {
-                  const container = this.selectionController.getCellContainer(
-                    groupKey,
-                    i,
-                    j
-                  );
-                  const rowId = container?.dataset.rowId;
-                  const columnId = container?.dataset.columnId;
-                  if (rowId && columnId) {
-                    container?.column$.value?.valueSetFromString(rowId, '');
-                  }
-                }
-              }
-            } else {
-              // single cell
-              const container = this.selectionController.getCellContainer(
-                groupKey,
-                focus.rowIndex,
-                focus.columnIndex
-              );
-              const rowId = container?.dataset.rowId;
-              const columnId = container?.dataset.columnId;
-              if (rowId && columnId) {
-                container?.column$.value?.valueSetFromString(rowId, '');
-              }
-            }
-          }
+          this._handleDeleteOrBackspace();
+        },
+        Delete: () => {
+          this._handleDeleteOrBackspace();
         },
         Escape: () => {
           const selection = this.selectionController.selection;
@@ -138,7 +142,11 @@ export class TableHotkeysController implements ReactiveController {
                 });
             }
           } else if (selection.isEditing) {
-            return false;
+            this.selectionController.selection = {
+              ...selection,
+              isEditing: false,
+            };
+            this.selectionController.focusToCell('down');
           } else {
             this.selectionController.selection = {
               ...selection,
@@ -172,27 +180,31 @@ export class TableHotkeysController implements ReactiveController {
         },
         Tab: ctx => {
           const selection = this.selectionController.selection;
-          if (
-            !selection ||
-            TableViewRowSelection.is(selection) ||
-            selection.isEditing
-          ) {
+          if (!selection || TableViewRowSelection.is(selection)) {
             return false;
           }
           ctx.get('keyboardState').raw.preventDefault();
+          if (selection.isEditing) {
+            this.selectionController.selection = {
+              ...selection,
+              isEditing: false,
+            };
+          }
           this.selectionController.focusToCell('right');
           return true;
         },
         'Shift-Tab': ctx => {
           const selection = this.selectionController.selection;
-          if (
-            !selection ||
-            TableViewRowSelection.is(selection) ||
-            selection.isEditing
-          ) {
+          if (!selection || TableViewRowSelection.is(selection)) {
             return false;
           }
           ctx.get('keyboardState').raw.preventDefault();
+          if (selection.isEditing) {
+            this.selectionController.selection = {
+              ...selection,
+              isEditing: false,
+            };
+          }
           this.selectionController.focusToCell('left');
           return true;
         },
@@ -388,6 +400,20 @@ export class TableHotkeysController implements ReactiveController {
             );
           }
         },
+      })
+    );
+    this.disposables.add(
+      this.logic.handleEvent('keyDown', ctx => {
+        const event = ctx.get('keyboardState').raw;
+        return handleCharStartEdit<DatabaseCellContainer>({
+          event,
+          selection: this.selectionController.selection,
+          getCellContainer: this.selectionController.getCellContainer.bind(
+            this.selectionController
+          ),
+          updateSelection: sel => (this.selectionController.selection = sel),
+          getColumn: cell => cell.column$.value,
+        });
       })
     );
   }

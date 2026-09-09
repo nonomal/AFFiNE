@@ -64,12 +64,13 @@ export const SignIn = ({
 
   return (
     <SignInPageContainer>
-      <div style={{ maxWidth: '400px', width: '100%' }}>
+      <div style={{ maxWidth: '400px', width: '100%', zIndex: 1 }}>
         <SignInPanel
           onSkip={handleClose}
           onAuthenticated={handleAuthenticated}
           initStep={initStep}
           server={server}
+          redirectUrl={redirectUrl ?? undefined}
         />
       </div>
     </SignInPageContainer>

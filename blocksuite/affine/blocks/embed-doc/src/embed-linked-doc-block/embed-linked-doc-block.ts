@@ -323,7 +323,8 @@ export class EmbedLinkedDocBlockComponent extends EmbedBlockComponent<EmbedLinke
 
   private readonly _renderEmbedView = () => {
     const linkedDoc = this.linkedDoc;
-    const isDeleted = !linkedDoc;
+    const trash = linkedDoc?.meta?.trash;
+    const isDeleted = trash || !linkedDoc;
     const isLoading = this._loading;
     const isError = this.isError;
     const isEmpty = this._isDocEmpty() && this.isBannerEmpty;
@@ -338,6 +339,7 @@ export class EmbedLinkedDocBlockComponent extends EmbedBlockComponent<EmbedLinke
       'note-empty': this.isNoteContentEmpty,
       'in-canvas': inCanvas,
       [this._cardStyle]: true,
+      'comment-highlighted': this.isCommentHighlighted,
     });
 
     const theme = this.std.get(ThemeProvider).theme;
@@ -425,33 +427,37 @@ export class EmbedLinkedDocBlockComponent extends EmbedBlockComponent<EmbedLinke
                   `
                 )
             )}
-            ${isError
-              ? html`
-                  <div class="affine-embed-linked-doc-card-content-reload">
-                    <div
-                      class="affine-embed-linked-doc-card-content-reload-button"
-                      @click=${this.refreshData}
-                    >
-                      ${ResetIcon()} <span>Reload</span>
+            ${
+              isError
+                ? html`
+                    <div class="affine-embed-linked-doc-card-content-reload">
+                      <div
+                        class="affine-embed-linked-doc-card-content-reload-button"
+                        @click=${this.refreshData}
+                      >
+                        ${ResetIcon()} <span>Reload</span>
+                      </div>
                     </div>
-                  </div>
-                `
-              : html`
-                  <div class="affine-embed-linked-doc-content-date">
-                    <span>Updated</span>
+                  `
+                : html`
+                    <div class="affine-embed-linked-doc-content-date">
+                      <span>Updated</span>
 
-                    <span>${dateText}</span>
-                  </div>
-                `}
+                      <span>${dateText}</span>
+                    </div>
+                  `
+            }
           </div>
 
-          ${showDefaultBanner
-            ? html`
-                <div class="affine-embed-linked-doc-banner default">
-                  ${defaultBanner}
-                </div>
-              `
-            : nothing}
+          ${
+            showDefaultBanner
+              ? html`
+                  <div class="affine-embed-linked-doc-banner default">
+                    ${defaultBanner}
+                  </div>
+                `
+              : nothing
+          }
         </div>
       `
     );
@@ -495,14 +501,6 @@ export class EmbedLinkedDocBlockComponent extends EmbedBlockComponent<EmbedLinke
 
     const linkedDoc = this.linkedDoc;
     if (linkedDoc) {
-      this.disposables.add(
-        linkedDoc.workspace.slots.docListUpdated.subscribe(() => {
-          this._load().catch(e => {
-            console.error(e);
-            this.isError = true;
-          });
-        })
-      );
       // Should throttle the blockUpdated event to avoid too many re-renders
       // Because the blockUpdated event is triggered too frequently at some cases
       this.disposables.add(
@@ -528,11 +526,6 @@ export class EmbedLinkedDocBlockComponent extends EmbedBlockComponent<EmbedLinke
       );
 
       this._setDocUpdatedAt();
-      this.disposables.add(
-        this.store.workspace.slots.docListUpdated.subscribe(() => {
-          this._setDocUpdatedAt();
-        })
-      );
 
       if (this._referenceToNode) {
         this._linkedDocMode = this.model.props.params?.mode ?? 'page';
@@ -558,6 +551,13 @@ export class EmbedLinkedDocBlockComponent extends EmbedBlockComponent<EmbedLinke
             this.isError = true;
           });
         }
+      })
+    );
+
+    this.disposables.add(
+      this.store.workspace.slots.docListUpdated.subscribe(() => {
+        this._setDocUpdatedAt();
+        this.refreshData();
       })
     );
 

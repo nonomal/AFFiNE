@@ -1,28 +1,45 @@
+import type {
+  AIModelService,
+  AIToolsConfigService,
+} from '@affine/core/modules/ai-button';
+import type {
+  ServerService,
+  SubscriptionService,
+} from '@affine/core/modules/cloud';
+import type { WorkspaceDialogService } from '@affine/core/modules/dialogs';
 import type { FeatureFlagService } from '@affine/core/modules/feature-flag';
-import type { ContextEmbedStatus, CopilotSessionType } from '@affine/graphql';
+import type { AppThemeService } from '@affine/core/modules/theme';
+import type { CopilotChatHistoryFragment } from '@affine/graphql';
 import { SignalWatcher, WithDisposable } from '@blocksuite/affine/global/lit';
+import { type NotificationService } from '@blocksuite/affine/shared/services';
 import { unsafeCSSVarV2 } from '@blocksuite/affine/shared/theme';
 import type { EditorHost } from '@blocksuite/affine/std';
 import { ShadowlessElement } from '@blocksuite/affine/std';
 import type { ExtensionType, Store } from '@blocksuite/affine/store';
 import { DeleteIcon, NewPageIcon } from '@blocksuite/icons/lit';
-import { type Signal, signal } from '@preact/signals-core';
 import { css, html, type PropertyValues } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createRef, type Ref, ref } from 'lit/directives/ref.js';
 import { throttle } from 'lodash-es';
 
 import type { AppSidebarConfig } from '../../chat-panel/chat-config';
-import type { ChatContextValue } from '../../chat-panel/chat-context';
-import type { ChatPanelMessages } from '../../chat-panel/chat-panel-messages';
-import { AIProvider } from '../../provider';
-import type { DocDisplayConfig, SearchMenuConfig } from '../ai-chat-chips';
-import type {
-  AIModelSwitchConfig,
-  AINetworkSearchConfig,
-  AIReasoningConfig,
-} from '../ai-chat-input';
-import { type HistoryMessage } from '../ai-chat-messages';
+import { AIAppEvents, type AIError } from '../../provider';
+import {
+  AIChatRuntime,
+  type AIChatSnapshot,
+  PlaygroundAIChatSessionStrategy,
+} from '../../runtime/chat';
+import { getAIRequestService } from '../../runtime/request';
+import { HISTORY_IMAGE_ACTIONS } from '../../utils/history-image-actions';
+import type { SearchMenuConfig } from '../ai-chat-add-context';
+import type { DocDisplayConfig } from '../ai-chat-chips';
+import type { ChatContextValue } from '../ai-chat-content';
+import type { AIPlaygroundConfig, AIReasoningConfig } from '../ai-chat-input';
+import {
+  type AIChatMessages,
+  type HistoryMessage,
+  isChatMessage,
+} from '../ai-chat-messages';
 
 const DEFAULT_CHAT_CONTEXT_VALUE: ChatContextValue = {
   quote: '',
@@ -32,6 +49,11 @@ const DEFAULT_CHAT_CONTEXT_VALUE: ChatContextValue = {
   status: 'idle',
   error: null,
   markdown: '',
+  snapshot: null,
+  attachments: [],
+  combinedElementsMarkdown: null,
+  docs: [],
+  html: null,
 };
 
 export class PlaygroundChat extends SignalWatcher(
@@ -70,9 +92,9 @@ export class PlaygroundChat extends SignalWatcher(
         }
       }
 
-      chat-panel-messages {
+      ai-chat-messages {
         flex: 1;
-        overflow-y: hidden;
+        overflow-y: auto;
       }
 
       .chat-panel-hints {
@@ -126,13 +148,13 @@ export class PlaygroundChat extends SignalWatcher(
   accessor doc!: Store;
 
   @property({ attribute: false })
-  accessor networkSearchConfig!: AINetworkSearchConfig;
+  accessor session!: CopilotChatHistoryFragment | null | undefined;
 
   @property({ attribute: false })
   accessor reasoningConfig!: AIReasoningConfig;
 
   @property({ attribute: false })
-  accessor modelSwitchConfig!: AIModelSwitchConfig;
+  accessor playgroundConfig!: AIPlaygroundConfig;
 
   @property({ attribute: false })
   accessor appSidebarConfig!: AppSidebarConfig;
@@ -147,10 +169,31 @@ export class PlaygroundChat extends SignalWatcher(
   accessor extensions!: ExtensionType[];
 
   @property({ attribute: false })
+  accessor serverService!: ServerService;
+
+  @property({ attribute: false })
   accessor affineFeatureFlagService!: FeatureFlagService;
 
   @property({ attribute: false })
-  accessor session: CopilotSessionType | undefined = undefined;
+  accessor affineThemeService!: AppThemeService;
+
+  @property({ attribute: false })
+  accessor affineWorkspaceDialogService!: WorkspaceDialogService;
+
+  @property({ attribute: false })
+  accessor notificationService!: NotificationService;
+
+  @property({ attribute: false })
+  accessor aiToolsConfigService!: AIToolsConfigService;
+
+  @property({ attribute: false })
+  accessor aiModelService!: AIModelService;
+
+  @property({ attribute: false })
+  accessor subscriptionService!: SubscriptionService;
+
+  @property({ attribute: false })
+  accessor onAISubscribe: (() => Promise<void>) | undefined;
 
   @property({ attribute: false })
   accessor addChat!: () => Promise<void>;
@@ -162,72 +205,74 @@ export class PlaygroundChat extends SignalWatcher(
   accessor chatContextValue: ChatContextValue = DEFAULT_CHAT_CONTEXT_VALUE;
 
   @state()
-  accessor embeddingProgress: [number, number] = [0, 0];
+  accessor runtimeSnapshot: AIChatSnapshot | null = null;
 
-  private readonly _isVisible: Signal<boolean | undefined> = signal(true);
+  private readonly _chatMessagesRef: Ref<AIChatMessages> =
+    createRef<AIChatMessages>();
 
-  private readonly _chatMessagesRef: Ref<ChatPanelMessages> =
-    createRef<ChatPanelMessages>();
+  private runtime: AIChatRuntime | null = null;
 
-  // request counter to track the latest request
-  private _updateHistoryCounter = 0;
+  private disposeRuntime: (() => void) | null = null;
+
+  get messages() {
+    const messages =
+      (this.runtimeSnapshot?.messages as HistoryMessage[] | undefined) ??
+      this.chatContextValue.messages;
+    return messages.filter(item => {
+      return (
+        isChatMessage(item) ||
+        item.messages?.length === 3 ||
+        (HISTORY_IMAGE_ACTIONS.includes(item.action) &&
+          item.messages?.length === 2)
+      );
+    });
+  }
+
+  get showActions() {
+    return false;
+  }
 
   private readonly _initPanel = async () => {
-    const userId = (await AIProvider.userInfo)?.id;
+    const userId = AIAppEvents.userInfo.value?.id;
     if (!userId) return;
 
-    this.isLoading = true;
-    await this._updateHistory();
-    this.isLoading = false;
+    this.ensureRuntime();
   };
 
-  private readonly _getSessionId = async () => {
-    return this.session?.id;
-  };
-
-  private readonly _createSessionId = async () => {
-    return this.session?.id;
-  };
-
-  private readonly _updateHistory = async () => {
-    const { doc } = this;
-
-    const currentRequest = ++this._updateHistoryCounter;
-
-    const [histories, actions] = await Promise.all([
-      AIProvider.histories?.chats(doc.workspace.id, doc.id),
-      AIProvider.histories?.actions(doc.workspace.id, doc.id),
-    ]);
-
-    // Check if this is still the latest request
-    if (currentRequest !== this._updateHistoryCounter) {
-      return;
-    }
-
-    const messages: HistoryMessage[] = actions ? [...actions] : [];
-
-    const sessionId = await this._getSessionId();
-    const history = histories?.find(history => history.sessionId === sessionId);
-    if (history) {
-      messages.push(...history.messages);
-    }
-
+  private readonly syncContextFromRuntime = () => {
+    const snapshot = this.runtimeSnapshot;
+    if (!snapshot) return;
     this.chatContextValue = {
       ...this.chatContextValue,
-      messages: messages.sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      ),
+      messages: snapshot.messages as HistoryMessage[],
+      status: snapshot.status,
+      error: snapshot.error as AIError | null,
     };
-
-    this._scrollToEnd();
   };
 
-  private readonly _updateEmbeddingProgress = (
-    count: Record<ContextEmbedStatus, number>
-  ) => {
-    const total = count.finished + count.processing + count.failed;
-    this.embeddingProgress = [count.finished, total];
+  private readonly ensureRuntime = () => {
+    if (!this.session || this.runtime) return;
+    this.runtime = new AIChatRuntime({
+      request: getAIRequestService(),
+      scope: {
+        kind: 'fork',
+        workspaceId: this.doc.workspace.id,
+        docId: this.doc.id,
+        parentSessionId: this.session.parentSessionId ?? this.session.sessionId,
+      },
+      strategy: new PlaygroundAIChatSessionStrategy(),
+    });
+    this.disposeRuntime = this.runtime.subscribe(() => {
+      this.runtimeSnapshot = this.runtime?.getSnapshot() ?? null;
+      this.syncContextFromRuntime();
+    });
+    this.runtimeSnapshot = this.runtime.getSnapshot();
+    this.runtime
+      .dispatch({
+        type: 'openSessionObject',
+        session: this.session,
+      })
+      .catch(console.error);
   };
 
   private readonly updateContext = (context: Partial<ChatContextValue>) => {
@@ -245,7 +290,23 @@ export class PlaygroundChat extends SignalWatcher(
     this._initPanel().catch(console.error);
   }
 
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this.disposeRuntime?.();
+    this.runtime?.dispose();
+    this.runtime = null;
+    this.disposeRuntime = null;
+  }
+
   protected override updated(_changedProperties: PropertyValues) {
+    if (_changedProperties.has('session')) {
+      this.disposeRuntime?.();
+      this.runtime?.dispose();
+      this.runtime = null;
+      this.disposeRuntime = null;
+      this.ensureRuntime();
+    }
+
     if (
       _changedProperties.has('chatContextValue') &&
       (this.chatContextValue.status === 'loading' ||
@@ -264,59 +325,89 @@ export class PlaygroundChat extends SignalWatcher(
   }
 
   override render() {
-    const [done, total] = this.embeddingProgress;
-    const isEmbedding = total > 0 && done < total;
+    const isSynchronizing =
+      this.runtimeSnapshot?.composer.scopeSelection.syncing ?? false;
 
     return html`<div class="chat-panel-container">
       <div class="chat-panel-title">
         <div class="chat-panel-title-text">
-          ${isEmbedding
-            ? html`<span data-testid="chat-panel-embedding-progress"
-                >Embedding ${done}/${total}</span
-              >`
-            : 'AFFiNE AI'}
+          ${
+            isSynchronizing
+              ? html`<span data-testid="chat-panel-embedding-progress"
+                  >Synchronizing sources</span
+                >`
+              : 'AFFiNE AI'
+          }
         </div>
         <div class="chat-panel-add" @click=${this.addChat}>
           ${NewPageIcon()}
           <affine-tooltip>Add chat</affine-tooltip>
         </div>
         <ai-history-clear
-          .host=${this.host}
           .doc=${this.doc}
-          .getSessionId=${this._getSessionId}
-          .onHistoryCleared=${this._updateHistory}
+          .session=${this.session}
+          .notificationService=${this.notificationService}
+          .onClearHistory=${async (sessionIds: string[]) => {
+            for (const sessionId of sessionIds) {
+              await this.runtime?.dispatch({
+                type: 'deleteSession',
+                sessionId,
+              });
+            }
+          }}
+          .onHistoryCleared=${() =>
+            this.session
+              ? this.runtime
+                  ?.dispatch({
+                    type: 'openSessionObject',
+                    session: this.session,
+                  })
+                  .catch(console.error)
+              : undefined}
           .chatContextValue=${this.chatContextValue}
         ></ai-history-clear>
         <div class="chat-panel-delete">${DeleteIcon()}</div>
       </div>
-      <chat-panel-messages
+      <ai-chat-messages
         ${ref(this._chatMessagesRef)}
-        .chatContextValue=${this.chatContextValue}
-        .getSessionId=${this._getSessionId}
-        .createSessionId=${this._createSessionId}
-        .updateContext=${this.updateContext}
         .host=${this.host}
-        .isLoading=${this.isLoading}
+        .workspaceId=${this.doc.workspace.id}
+        .docId=${this.doc.id}
+        .isHistoryLoading=${this.isLoading}
+        .chatContextValue=${this.chatContextValue}
+        .session=${this.session}
+        .runtime=${this.runtime}
+        .runtimeSnapshot=${this.runtimeSnapshot}
+        .updateContext=${this.updateContext}
         .extensions=${this.extensions}
         .affineFeatureFlagService=${this.affineFeatureFlagService}
-        .networkSearchConfig=${this.networkSearchConfig}
+        .affineThemeService=${this.affineThemeService}
+        .notificationService=${this.notificationService}
+        .aiToolsConfigService=${this.aiToolsConfigService}
         .reasoningConfig=${this.reasoningConfig}
-      ></chat-panel-messages>
+        .messages=${this.messages}
+      ></ai-chat-messages>
       <ai-chat-composer
         .host=${this.host}
-        .doc=${this.doc}
+        .workspaceId=${this.doc.workspace.id}
+        .docId=${this.doc.id}
         .session=${this.session}
-        .getSessionId=${this._getSessionId}
-        .createSessionId=${this._createSessionId}
+        .runtime=${this.runtime}
+        .runtimeSnapshot=${this.runtimeSnapshot}
         .chatContextValue=${this.chatContextValue}
         .updateContext=${this.updateContext}
-        .updateEmbeddingProgress=${this._updateEmbeddingProgress}
-        .isVisible=${this._isVisible}
-        .networkSearchConfig=${this.networkSearchConfig}
         .reasoningConfig=${this.reasoningConfig}
-        .modelSwitchConfig=${this.modelSwitchConfig}
+        .playgroundConfig=${this.playgroundConfig}
         .docDisplayConfig=${this.docDisplayConfig}
         .searchMenuConfig=${this.searchMenuConfig}
+        .serverService=${this.serverService}
+        .notificationService=${this.notificationService}
+        .aiToolsConfigService=${this.aiToolsConfigService}
+        .affineWorkspaceDialogService=${this.affineWorkspaceDialogService}
+        .affineFeatureFlagService=${this.affineFeatureFlagService}
+        .subscriptionService=${this.subscriptionService}
+        .aiModelService=${this.aiModelService}
+        .onAISubscribe=${this.onAISubscribe}
       ></ai-chat-composer>
     </div>`;
   }

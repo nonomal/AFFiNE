@@ -1,15 +1,18 @@
 import {
   CancelWrapIcon,
   CaptionIcon,
+  CollapseCodeIcon,
   CopyIcon,
   DeleteIcon,
   DuplicateIcon,
+  ExpandCodeIcon,
   WrapIcon,
 } from '@blocksuite/affine-components/icons';
 import type { MenuItemGroup } from '@blocksuite/affine-components/toolbar';
+import { CommentProviderIdentifier } from '@blocksuite/affine-shared/services';
 import { isInsidePageEditor } from '@blocksuite/affine-shared/utils';
 import { noop, sleep } from '@blocksuite/global/utils';
-import { NumberedListIcon } from '@blocksuite/icons/lit';
+import { CommentIcon, NumberedListIcon } from '@blocksuite/icons/lit';
 import { BlockSelection } from '@blocksuite/std';
 import { html } from 'lit';
 import { ifDefined } from 'lit/directives/if-defined.js';
@@ -85,6 +88,38 @@ export const PRIMARY_GROUPS: MenuItemGroup<CodeBlockToolbarContext>[] = [
         },
       },
       {
+        type: 'collapse',
+        when: ({ doc }) => !doc.readonly,
+        generate: ({ blockComponent }) => {
+          return {
+            action: () => {
+              blockComponent.setCollapsed(!blockComponent.collapsed$.value);
+            },
+            render: item => {
+              const collapsed = blockComponent.collapsed$.value;
+              const icon = collapsed ? ExpandCodeIcon : CollapseCodeIcon;
+              const label = collapsed ? 'Expand code' : 'Collapse code';
+              return html`
+                <editor-icon-button
+                  class="code-toolbar-button collapse"
+                  aria-label=${label}
+                  .tooltip=${label}
+                  .tooltipOffset=${4}
+                  .iconSize=${'16px'}
+                  .iconContainerPadding=${4}
+                  @click=${(e: MouseEvent) => {
+                    e.stopPropagation();
+                    item.action();
+                  }}
+                >
+                  ${icon}
+                </editor-icon-button>
+              `;
+            },
+          };
+        },
+      },
+      {
         type: 'caption',
         label: 'Caption',
         icon: CaptionIcon,
@@ -113,6 +148,47 @@ export const PRIMARY_GROUPS: MenuItemGroup<CodeBlockToolbarContext>[] = [
           };
         },
       },
+      {
+        type: 'comment',
+        label: 'Comment',
+        tooltip: 'Comment',
+        icon: CommentIcon({
+          width: '20',
+          height: '20',
+        }),
+        when: ({ std }) => !!std.getOptional(CommentProviderIdentifier),
+        generate: ({ blockComponent }) => {
+          return {
+            action: () => {
+              const commentProvider = blockComponent.std.getOptional(
+                CommentProviderIdentifier
+              );
+              if (!commentProvider) return;
+
+              commentProvider.addComment([
+                new BlockSelection({
+                  blockId: blockComponent.model.id,
+                }),
+              ]);
+            },
+            render: item =>
+              html`<editor-icon-button
+                class="code-toolbar-button comment"
+                aria-label=${ifDefined(item.label)}
+                .tooltip=${item.label}
+                .tooltipOffset=${4}
+                .iconSize=${'16px'}
+                .iconContainerPadding=${4}
+                @click=${(e: MouseEvent) => {
+                  e.stopPropagation();
+                  item.action();
+                }}
+              >
+                ${item.icon}
+              </editor-icon-button>`,
+          };
+        },
+      },
     ],
   },
 ];
@@ -132,7 +208,8 @@ export const toggleGroup: MenuItemGroup<CodeBlockToolbarContext> = {
             return html`
               <editor-menu-action
                 @click=${() => {
-                  blockComponent.setWrap(!wrapped);
+                  const currentWrap = blockComponent.model.props.wrap;
+                  blockComponent.setWrap(!currentWrap);
                 }}
                 aria-label=${label}
               >
@@ -157,13 +234,13 @@ export const toggleGroup: MenuItemGroup<CodeBlockToolbarContext> = {
         return {
           action: () => {},
           render: () => {
-            const lineNumber = blockComponent.model.props.lineNumber ?? true;
+            const lineNumber = blockComponent.showLineNumbers;
             const label = lineNumber ? 'Cancel line number' : 'Line number';
             return html`
               <editor-menu-action
                 @click=${() => {
                   blockComponent.store.updateBlock(blockComponent.model, {
-                    lineNumber: !lineNumber,
+                    lineNumber: !blockComponent.showLineNumbers,
                   });
                 }}
                 aria-label=${label}
